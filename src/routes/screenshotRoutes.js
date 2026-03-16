@@ -11,7 +11,7 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-router.post("/screenshots", upload.single("screenshot"), async (req, res) => {
+router.post("/", upload.single("screenshot"), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({
