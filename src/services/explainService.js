@@ -140,7 +140,9 @@ Rules:
     temperature: 0.2,
   });
 
-  const aiText = response.choices?.[0]?.message?.content || "No response from AI.";
+  const aiText =
+    response.choices?.[0]?.message?.content || "No response from AI.";
+
   return parseAiResponse(aiText);
 }
 

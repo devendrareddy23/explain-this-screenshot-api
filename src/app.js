@@ -7,7 +7,23 @@ const app = express();
 
 app.use(
   cors({
-    origin: true,
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, true);
+
+      const allowedOrigins = [
+        "https://explain-this-screenshot-ui-otd4.vercel.app",
+      ];
+
+      const isLocalhost =
+        /^http:\/\/localhost:\d+$/.test(origin) ||
+        /^http:\/\/127\.0\.0\.1:\d+$/.test(origin);
+
+      if (allowedOrigins.includes(origin) || isLocalhost) {
+        return callback(null, true);
+      }
+
+      return callback(new Error("Not allowed by CORS"));
+    },
     methods: ["GET", "POST"],
   })
 );
