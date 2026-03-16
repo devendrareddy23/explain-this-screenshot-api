@@ -17,19 +17,34 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-const formatExplanation = ({ problem, explanation, solution, steps }) => {
+const formatExplanation = ({
+  problem,
+  explanation,
+  commands,
+  solution,
+  steps,
+}) => {
+  const safeCommands = Array.isArray(commands) ? commands : [];
   const safeSteps = Array.isArray(steps) ? steps : [];
+
+  const commandsText =
+    safeCommands.length > 0
+      ? safeCommands.join("\n")
+      : "No specific commands provided.";
 
   const stepsText =
     safeSteps.length > 0
       ? safeSteps.map((step, index) => `${index + 1}. ${step}`).join("\n")
-      : "1. Check the screenshot details carefully.\n2. Review the related code or system.\n3. Apply the most likely fix and test again.";
+      : "1. Review the error carefully.\n2. Check the related code or server logs.\n3. Apply the suggested fix and test again.";
 
   return `Problem:
 ${problem || "Unable to identify the main problem from the screenshot."}
 
 Explanation:
 ${explanation || "No detailed explanation was returned."}
+
+Commands to Run:
+${commandsText}
 
 Solution:
 ${solution || "Review the screenshot context and apply the most likely fix."}
@@ -71,25 +86,25 @@ router.post("/", upload.single("screenshot"), async (req, res) => {
         {
           role: "system",
           content: `
-You are an expert software engineer, debugger, and technical mentor.
+You are an expert software engineer and debugging mentor.
 
-You must return ONLY valid JSON in this exact shape:
+Analyze the screenshot and return ONLY valid JSON in this exact format:
 
 {
-  "problem": "string",
-  "explanation": "string",
-  "solution": "string",
+  "problem": "short description of the error",
+  "explanation": "clear beginner-friendly explanation",
+  "commands": ["command 1", "command 2"],
+  "solution": "what the user should do",
   "steps": ["step 1", "step 2", "step 3"]
 }
 
 Rules:
+- Focus on developer and terminal errors
+- If possible, provide exact commands to fix the issue
+- Commands must be copy-paste ready
+- Keep the explanation simple and practical
+- If the screenshot is not a coding error, still fill all fields clearly
 - Return JSON only
-- Do not return markdown
-- Do not return extra text
-- Keep explanation beginner friendly
-- If the screenshot shows an error, explain the likely cause
-- If commands are relevant, include them inside the steps
-- If the screenshot is a UI or general image, still fill all 4 fields clearly
 `,
         },
         {
@@ -108,7 +123,7 @@ Rules:
           ],
         },
       ],
-      max_tokens: 500,
+      max_tokens: 600,
     });
 
     const rawContent = response?.choices?.[0]?.message?.content?.trim();
