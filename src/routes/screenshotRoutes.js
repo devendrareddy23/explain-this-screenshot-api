@@ -1,4 +1,4 @@
-kconst express = require("express");
+const express = require("express");
 const multer = require("multer");
 const OpenAI = require("openai");
 
@@ -44,6 +44,7 @@ router.post("/screenshots", upload.single("screenshot"), async (req, res) => {
       success: true,
       explanation: response.choices[0].message.content,
     });
+
   } catch (error) {
     console.error(error);
     res.status(500).json({
