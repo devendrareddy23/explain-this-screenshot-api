@@ -17,6 +17,16 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+const cleanStepText = (step) => {
+  if (!step || typeof step !== "string") return "";
+  return step.replace(/^\s*\d+[\.\)]\s*/, "").trim();
+};
+
+const cleanCommandText = (command) => {
+  if (!command || typeof command !== "string") return "";
+  return command.trim();
+};
+
 const formatExplanation = ({
   problem,
   explanation,
@@ -24,13 +34,18 @@ const formatExplanation = ({
   solution,
   steps,
 }) => {
-  const safeCommands = Array.isArray(commands) ? commands : [];
-  const safeSteps = Array.isArray(steps) ? steps : [];
+  const safeCommands = Array.isArray(commands)
+    ? commands.map(cleanCommandText).filter(Boolean)
+    : [];
+
+  const safeSteps = Array.isArray(steps)
+    ? steps.map(cleanStepText).filter(Boolean)
+    : [];
 
   const commandsText =
     safeCommands.length > 0
       ? safeCommands.join("\n")
-      : "No specific commands provided.";
+      : "No exact command is appropriate for this issue.";
 
   const stepsText =
     safeSteps.length > 0
@@ -99,10 +114,14 @@ Analyze the screenshot and return ONLY valid JSON in this exact format:
 }
 
 Rules:
-- Focus on developer and terminal errors
-- If possible, provide exact commands to fix the issue
+- Focus on developer, terminal, backend, API, deployment, and coding errors
+- Only include commands if they are truly relevant to the screenshot
+- Do NOT invent package install commands unless the screenshot clearly shows a missing package/module issue
+- Do NOT give random setup commands
+- If no exact command is appropriate, return an empty commands array
+- Steps must NOT be pre-numbered
 - Commands must be copy-paste ready
-- Keep the explanation simple and practical
+- Keep the explanation practical and simple
 - If the screenshot is not a coding error, still fill all fields clearly
 - Return JSON only
 `,
