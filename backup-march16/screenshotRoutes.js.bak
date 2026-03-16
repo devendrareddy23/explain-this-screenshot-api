@@ -1,0 +1,74 @@
+const express = require("express");
+const multer = require("multer");
+const fs = require("fs");
+const path = require("path");
+const { analyzeDeveloperInput } = require("../services/explainService");
+
+const router = express.Router();
+
+const uploadsDir = path.join(process.cwd(), "uploads");
+
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, uploadsDir);
+  },
+  filename: function (req, file, cb) {
+    const uniqueName = `${Date.now()}-${file.originalname.replace(/\s+/g, "-")}`;
+    cb(null, uniqueName);
+  },
+});
+
+const upload = multer({
+  storage,
+  limits: {
+    fileSize: 8 * 1024 * 1024,
+  },
+});
+
+router.post("/", upload.single("screenshot"), async (req, res) => {
+  let uploadedFilePath = null;
+
+  try {
+    const errorText = req.body?.errorText?.trim() || "";
+
+    if (req.file) {
+      uploadedFilePath = req.file.path;
+    }
+
+    if (!uploadedFilePath && !errorText) {
+      return res.status(400).json({
+        success: false,
+        message: "Please upload a screenshot or paste an error message.",
+      });
+    }
+
+    const explanation = await analyzeDeveloperInput({
+      filePath: uploadedFilePath,
+      mimeType: req.file?.mimetype,
+      errorText,
+    });
+
+    return res.json({
+      success: true,
+      explanation,
+    });
+  } catch (error) {
+    console.error("Analyze error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to analyze the error.",
+      error: error.message,
+    });
+  } finally {
+    if (uploadedFilePath && fs.existsSync(uploadedFilePath)) {
+      fs.unlinkSync(uploadedFilePath);
+    }
+  }
+});
+
+module.exports = router;

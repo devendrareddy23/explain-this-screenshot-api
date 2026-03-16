@@ -1,0 +1,122 @@
+const express = require("express");
+const multer = require("multer");
+const OpenAI = require("openai");
+
+const router = express.Router();
+
+const storage = multer.memoryStorage();
+
+const upload = multer({
+  storage,
+  limits: {
+    fileSize: 10 * 1024 * 1024,
+  },
+});
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+router.post("/", upload.single("screenshot"), async (req, res) => {
+  try {
+    if (!process.env.OPENAI_API_KEY) {
+      return res.status(500).json({
+        success: false,
+        message: "OPENAI_API_KEY is missing on the server",
+      });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: "Screenshot file is required",
+      });
+    }
+
+    if (!req.file.mimetype || !req.file.mimetype.startsWith("image/")) {
+      return res.status(400).json({
+        success: false,
+        message: "Only image files are allowed",
+      });
+    }
+
+    const mimeType = req.file.mimetype;
+    const base64Image = req.file.buffer.toString("base64");
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: `
+You are an expert software engineer, debugger, and technical mentor.
+
+Analyze the uploaded screenshot and ALWAYS respond in exactly this structure:
+
+Problem:
+(What is happening in the screenshot)
+
+Explanation:
+(Explain clearly what the screenshot means in beginner-friendly language)
+
+Solution:
+(Describe the most likely fix or next action)
+
+Steps to Fix:
+1. ...
+2. ...
+3. ...
+
+Rules:
+- Keep the response practical and easy to understand
+- If it is an error screenshot, explain the likely cause
+- If commands are relevant, include exact commands
+- If it is a UI screenshot, explain what the user is seeing
+- Do not return a generic paragraph
+- Do not start with "This screenshot shows"
+- Always follow the 4-section format above
+`,
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: "Analyze this screenshot and return the answer in the required format.",
+            },
+            {
+              type: "image_url",
+              image_url: {
+                url: `data:${mimeType};base64,${base64Image}`,
+              },
+            },
+          ],
+        },
+      ],
+      max_tokens: 500,
+    });
+
+    const explanation = response?.choices?.[0]?.message?.content?.trim();
+
+    if (!explanation) {
+      return res.status(500).json({
+        success: false,
+        message: "No explanation returned from OpenAI",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      explanation,
+    });
+  } catch (error) {
+    console.error("Screenshot analysis error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to analyze screenshot",
+    });
+  }
+});
+
+module.exports = router;

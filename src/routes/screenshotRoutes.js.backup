@@ -1,0 +1,91 @@
+const express = require("express");
+const multer = require("multer");
+const OpenAI = require("openai");
+
+const router = express.Router();
+
+const storage = multer.memoryStorage();
+
+const upload = multer({
+  storage,
+  limits: {
+    fileSize: 10 * 1024 * 1024,
+  },
+});
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+router.post("/", upload.single("screenshot"), async (req, res) => {
+  try {
+    if (!process.env.OPENAI_API_KEY) {
+      return res.status(500).json({
+        success: false,
+        message: "OPENAI_API_KEY is missing on the server",
+      });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: "Screenshot file is required",
+      });
+    }
+
+    if (!req.file.mimetype || !req.file.mimetype.startsWith("image/")) {
+      return res.status(400).json({
+        success: false,
+        message: "Only image files are allowed",
+      });
+    }
+
+    const mimeType = req.file.mimetype;
+    const base64Image = req.file.buffer.toString("base64");
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: "Explain this screenshot clearly. If it shows an error, also suggest how to fix it.",
+            },
+            {
+              type: "image_url",
+              image_url: {
+                url: `data:${mimeType};base64,${base64Image}`,
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    const explanation = response?.choices?.[0]?.message?.content;
+
+    if (!explanation) {
+      return res.status(500).json({
+        success: false,
+        message: "No explanation returned from OpenAI",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      explanation,
+    });
+
+  } catch (error) {
+    console.error("Screenshot analysis error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to analyze screenshot",
+    });
+  }
+});
+
+module.exports = router;

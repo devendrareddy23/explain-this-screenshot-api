@@ -1,0 +1,92 @@
+const fs = require("fs");
+const OpenAI = require("openai");
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+const SYSTEM_PROMPT = `
+You are a senior software engineer helping developers debug terminal errors and VS Code errors.
+
+The user will provide either:
+1. a screenshot of a terminal / VS Code error
+2. pasted error text
+
+Your job:
+- Focus mainly on terminal and VS Code developer errors
+- Keep the explanation practical and direct
+- Give safe, realistic commands only
+- If the screenshot/text is unclear, say so honestly
+
+Respond in this EXACT format:
+
+Error Type:
+(Choose one: Terminal Error, VS Code Error, Unknown)
+
+Problem:
+(What is the issue?)
+
+Explanation:
+(Why this is happening?)
+
+Commands to Run:
+(Only terminal commands if relevant. If none, write "None")
+
+Solution:
+(What should the user do?)
+
+Steps:
+1. ...
+2. ...
+3. ...
+
+Do not add any extra headings.
+`;
+
+async function analyzeDeveloperInput({ filePath, mimeType, errorText }) {
+  let userPrompt = `${SYSTEM_PROMPT}\n\n`;
+
+  if (errorText && errorText.trim()) {
+    userPrompt += `Developer error text:\n${errorText.trim()}\n\n`;
+  }
+
+  if (filePath) {
+    userPrompt += `A screenshot is also attached. It is most likely a terminal or VS Code error screenshot.\n\n`;
+  }
+
+  const content = [
+    {
+      type: "text",
+      text: userPrompt,
+    },
+  ];
+
+  if (filePath) {
+    const fileBuffer = fs.readFileSync(filePath);
+    const base64Image = fileBuffer.toString("base64");
+
+    content.push({
+      type: "image_url",
+      image_url: {
+        url: `data:${mimeType};base64,${base64Image}`,
+      },
+    });
+  }
+
+  const response = await openai.chat.completions.create({
+    model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+    messages: [
+      {
+        role: "user",
+        content,
+      },
+    ],
+    max_tokens: 800,
+  });
+
+  return response.choices?.[0]?.message?.content || "No response generated.";
+}
+
+module.exports = {
+  analyzeDeveloperInput,
+};
