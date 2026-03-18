@@ -4,148 +4,92 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-function extractSection(text, sectionName, nextSectionNames = []) {
-  const escapedSection = sectionName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const nextPattern =
-    nextSectionNames.length > 0
-      ? nextSectionNames
-          .map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-          .join("|")
-      : null;
+async function explainScreenshot({ errorText, imageBase64 }) {
+  try {
+    const prompt = `
+You are a senior backend engineer.
 
-  const regex = nextPattern
-    ? new RegExp(
-        `${escapedSection}:\\s*([\\s\\S]*?)(?=\\n(?:${nextPattern}):|$)`,
-        "i"
-      )
-    : new RegExp(`${escapedSection}:\\s*([\\s\\S]*)`, "i");
+User gives an error.
 
+Your job:
+Give FAST, PRACTICAL FIX.
+
+Output STRICTLY in this format:
+
+Problem:
+(1 line)
+
+Quick Fix:
+(1-2 lines)
+
+Commands to Run:
+(copy-paste commands only)
+
+Code Fix:
+(code snippet if needed)
+
+Steps:
+(short steps)
+
+Next Best Action:
+(what user should try next if fix doesn't work)
+
+Prevent This:
+(how to avoid this issue in future)
+
+Rules:
+- no long explanations
+- focus on action
+- think like fixing production bug fast
+`;
+
+    const userContent = errorText
+      ? `Error:\n${errorText}`
+      : "Analyze the screenshot and explain the issue.";
+
+    const response = await openai.responses.create({
+      model: "gpt-4.1-mini",
+      input: [
+        {
+          role: "system",
+          content: prompt,
+        },
+        {
+          role: "user",
+          content: userContent,
+        },
+      ],
+    });
+
+    const outputText = response.output_text;
+
+    return {
+      raw: outputText,
+      problem: extractSection(outputText, "Problem"),
+      quickFix: extractSection(outputText, "Quick Fix"),
+      explanation: extractSection(outputText, "Explanation"),
+      commandsToRun: extractSection(outputText, "Commands to Run"),
+      codeFix: extractSection(outputText, "Code Fix"),
+      steps: extractList(outputText, "Steps"),
+      nextBestAction: extractSection(outputText, "Next Best Action"),
+      preventThis: extractSection(outputText, "Prevent This"),
+    };
+  } catch (error) {
+    console.error("explainScreenshot error:", error);
+    throw error;
+  }
+}
+
+function extractSection(text, title) {
+  const regex = new RegExp(`${title}:(.*?)(\\n\\w+:|$)`, "s");
   const match = text.match(regex);
   return match ? match[1].trim() : "";
 }
 
-function parseAiResponse(text) {
-  const problem = extractSection(text, "Problem", [
-    "Quick Fix",
-    "Explanation",
-    "Commands to Run",
-    "Code Fix",
-    "Steps",
-  ]);
-
-  const quickFix = extractSection(text, "Quick Fix", [
-    "Explanation",
-    "Commands to Run",
-    "Code Fix",
-    "Steps",
-  ]);
-
-  const explanation = extractSection(text, "Explanation", [
-    "Commands to Run",
-    "Code Fix",
-    "Steps",
-  ]);
-
-  const commandsToRun = extractSection(text, "Commands to Run", [
-    "Code Fix",
-    "Steps",
-  ]);
-
-  const codeFix = extractSection(text, "Code Fix", ["Steps"]);
-
-  const stepsRaw = extractSection(text, "Steps");
-  const steps = stepsRaw
-    ? stepsRaw
-        .split("\n")
-        .map((line) => line.replace(/^\d+[\).\s-]*/, "").trim())
-        .filter(Boolean)
-    : [];
-
-  return {
-    raw: text,
-    problem,
-    quickFix,
-    explanation,
-    commandsToRun,
-    codeFix,
-    steps,
-  };
+function extractList(text, title) {
+  const section = extractSection(text, title);
+  if (!section) return [];
+  return section.split("\n").map((line) => line.trim()).filter(Boolean);
 }
 
-async function explainScreenshot({ imageBase64, mimeType, errorText }) {
-  const prompt = `
-You are a senior debugging assistant for software developers.
-
-The user may provide:
-1. A screenshot of an error
-2. Raw pasted error text
-3. Both
-
-Analyze the issue and return the answer in EXACTLY this format:
-
-Problem:
-<short and clear description of the real issue>
-
-Quick Fix:
-<fastest practical fix in 1-2 lines>
-
-Explanation:
-<brief explanation of why the error happened>
-
-Commands to Run:
-<terminal commands only if needed, otherwise write "None">
-
-Code Fix:
-<small corrected code snippet if useful, otherwise write "None">
-
-Steps:
-1. <step 1>
-2. <step 2>
-3. <step 3>
-
-Rules:
-- Keep it practical
-- Keep it short
-- Focus on real debugging help
-- Prefer developer-friendly answers
-- If unsure, clearly say what needs to be checked
-`;
-
-  const content = [{ type: "text", text: prompt }];
-
-  if (errorText && errorText.trim()) {
-    content.push({
-      type: "text",
-      text: `User pasted error text:\n${errorText.trim()}`,
-    });
-  }
-
-  if (imageBase64 && mimeType) {
-    content.push({
-      type: "image_url",
-      image_url: {
-        url: `data:${mimeType};base64,${imageBase64}`,
-      },
-    });
-  }
-
-  const response = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [
-      {
-        role: "user",
-        content,
-      },
-    ],
-    temperature: 0.2,
-  });
-
-  const aiText =
-    response.choices?.[0]?.message?.content || "No response from AI.";
-
-  return parseAiResponse(aiText);
-}
-
-module.exports = {
-  explainScreenshot,
-};
+module.exports = { explainScreenshot };
