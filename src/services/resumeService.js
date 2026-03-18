@@ -4,141 +4,117 @@ const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-const extractJson = (text) => {
-  try {
-    return JSON.parse(text);
-  } catch (error) {
-    const match = text.match(/\{[\s\S]*\}/);
-    if (!match) {
-      throw new Error("Could not extract JSON from AI response.");
+function extractSection(text, startLabel, endLabels = []) {
+  const startIndex = text.indexOf(startLabel);
+  if (startIndex === -1) return "";
+
+  const contentStart = startIndex + startLabel.length;
+  let endIndex = text.length;
+
+  for (const label of endLabels) {
+    const idx = text.indexOf(label, contentStart);
+    if (idx !== -1 && idx < endIndex) {
+      endIndex = idx;
     }
-    return JSON.parse(match[0]);
   }
-};
 
-const buildPrompt = (resumeText, jobDescription) => {
-  return `
-You are an expert ATS resume tailoring assistant.
-
-Your job:
-- Compare the candidate's resume against the job description
-- Improve the resume so it matches the role better
-- Be honest and do NOT invent fake experience
-- Only strengthen wording, add missing keywords if they are reasonably implied, and improve structure
-- Make the result feel premium and professional
-- Return valid JSON only
-- Do not wrap output in markdown
-- Do not include triple backticks
-
-Candidate Resume:
-${resumeText}
-
-Job Description:
-${jobDescription}
-
-Return this exact JSON structure:
-
-{
-  "matchScore": 0,
-  "missingKeywords": [],
-  "tailoredSummary": "",
-  "tailoredSkills": [],
-  "rewrittenExperienceBullets": [],
-  "projectImprovements": [],
-  "atsTips": [],
-  "coverLetter": "",
-  "tailoredResume": {
-    "name": "",
-    "title": "",
-    "summary": "",
-    "skills": [],
-    "experienceBullets": [],
-    "projects": []
-  }
+  return text.slice(contentStart, endIndex).trim();
 }
 
-Rules:
-- matchScore must be a number from 0 to 100
-- missingKeywords must be an array of strings
-- tailoredSkills must be an array of strings
-- rewrittenExperienceBullets must be an array of strong bullet points
-- projectImprovements must be an array of realistic project bullets
-- atsTips must be an array of practical ATS suggestions
-- coverLetter must be 1 short professional cover letter
-- tailoredResume.summary must be concise and strong
-- tailoredResume.skills must be an array
-- tailoredResume.experienceBullets must be an array
-- tailoredResume.projects must be an array
-- Keep the output realistic for the user's background
+async function tailorResume({ resumeText, jobDescription }) {
+  const prompt = `
+You are an expert resume strategist and ATS optimizer.
+
+Tailor the user's resume to the given job description.
+
+Return the response in EXACTLY this plain text format:
+
+MATCH SCORE:
+<number from 1 to 100>
+
+SUGGESTED JOB TITLE:
+<best-fit job title>
+
+PROFESSIONAL SUMMARY:
+<3 to 5 lines>
+
+TAILORED SKILLS:
+- skill 1
+- skill 2
+- skill 3
+- skill 4
+- skill 5
+
+TAILORED EXPERIENCE:
+- bullet 1
+- bullet 2
+- bullet 3
+- bullet 4
+
+ATS KEYWORDS MATCHED:
+- keyword 1
+- keyword 2
+- keyword 3
+- keyword 4
+- keyword 5
+
+MISSING KEYWORDS:
+- missing keyword 1
+- missing keyword 2
+- missing keyword 3
+- missing keyword 4
+- missing keyword 5
+
+COVER LETTER:
+<short professional cover letter>
+
+RULES:
+- Do not invent fake companies or fake experience.
+- Improve wording, but keep everything believable.
+- Be ATS-friendly.
+- Keep output plain text only.
+- Keep it strong, practical, and professional.
+
+USER RESUME:
+${resumeText}
+
+JOB DESCRIPTION:
+${jobDescription}
 `;
-};
-
-const formatTailoredResumeText = (resume) => {
-  const skillsText = (resume.skills || []).map((item) => `- ${item}`).join("\n");
-  const experienceText = (resume.experienceBullets || [])
-    .map((item) => `- ${item}`)
-    .join("\n");
-  const projectsText = (resume.projects || []).map((item) => `- ${item}`).join("\n");
-
-  return `${resume.name || "Candidate"}
-${resume.title || ""}
-
-SUMMARY
-${resume.summary || ""}
-
-SKILLS
-${skillsText || "- Not available"}
-
-EXPERIENCE
-${experienceText || "- Not available"}
-
-PROJECTS
-${projectsText || "- Not available"}
-`.trim();
-};
-
-const tailorResume = async (resumeText, jobDescription) => {
-  const prompt = buildPrompt(resumeText, jobDescription);
 
   const response = await client.responses.create({
-    model: "gpt-5.4-mini",
+    model: "gpt-4.1-mini",
     input: prompt,
   });
 
-  const rawText = response.output_text;
-  const parsed = extractJson(rawText);
+  const rawText = response.output_text || "";
 
-  const result = {
-    matchScore: Number(parsed.matchScore || 0),
-    missingKeywords: Array.isArray(parsed.missingKeywords) ? parsed.missingKeywords : [],
-    tailoredSummary: parsed.tailoredSummary || "",
-    tailoredSkills: Array.isArray(parsed.tailoredSkills) ? parsed.tailoredSkills : [],
-    rewrittenExperienceBullets: Array.isArray(parsed.rewrittenExperienceBullets)
-      ? parsed.rewrittenExperienceBullets
-      : [],
-    projectImprovements: Array.isArray(parsed.projectImprovements)
-      ? parsed.projectImprovements
-      : [],
-    atsTips: Array.isArray(parsed.atsTips) ? parsed.atsTips : [],
-    coverLetter: parsed.coverLetter || "",
-    tailoredResume: {
-      name: parsed.tailoredResume?.name || "Candidate",
-      title: parsed.tailoredResume?.title || "Professional",
-      summary: parsed.tailoredResume?.summary || "",
-      skills: Array.isArray(parsed.tailoredResume?.skills) ? parsed.tailoredResume.skills : [],
-      experienceBullets: Array.isArray(parsed.tailoredResume?.experienceBullets)
-        ? parsed.tailoredResume.experienceBullets
-        : [],
-      projects: Array.isArray(parsed.tailoredResume?.projects)
-        ? parsed.tailoredResume.projects
-        : [],
-    },
+  return {
+    rawText,
+    matchScore: extractSection(rawText, "MATCH SCORE:", [
+      "SUGGESTED JOB TITLE:",
+    ]),
+    suggestedJobTitle: extractSection(rawText, "SUGGESTED JOB TITLE:", [
+      "PROFESSIONAL SUMMARY:",
+    ]),
+    professionalSummary: extractSection(rawText, "PROFESSIONAL SUMMARY:", [
+      "TAILORED SKILLS:",
+    ]),
+    tailoredSkills: extractSection(rawText, "TAILORED SKILLS:", [
+      "TAILORED EXPERIENCE:",
+    ]),
+    tailoredExperience: extractSection(rawText, "TAILORED EXPERIENCE:", [
+      "ATS KEYWORDS MATCHED:",
+    ]),
+    atsKeywordsMatched: extractSection(rawText, "ATS KEYWORDS MATCHED:", [
+      "MISSING KEYWORDS:",
+    ]),
+    missingKeywords: extractSection(rawText, "MISSING KEYWORDS:", [
+      "COVER LETTER:",
+    ]),
+    coverLetter: extractSection(rawText, "COVER LETTER:"),
   };
-
-  result.tailoredResumeText = formatTailoredResumeText(result.tailoredResume);
-
-  return result;
-};
+}
 
 module.exports = {
   tailorResume,
