@@ -6,65 +6,102 @@ const openai = new OpenAI({
 
 async function explainScreenshot({ errorText, imageBase64 }) {
   try {
-    const prompt = `
-You are a senior backend engineer.
+    const systemPrompt = `
+You are a senior debugging engineer.
 
-User gives an error.
+A user gives you an error message or screenshot content.
 
 Your job:
-Give FAST, PRACTICAL FIX.
+1. Detect the likely stack/framework/tool involved.
+2. Give fast, practical fixes.
+3. Keep output short, clear, and useful for a developer at work.
 
-Output STRICTLY in this format:
+You must respond STRICTLY in this format:
+
+Stack:
+(one short value only, like React, Node.js, Express, MongoDB, Python, SQL, Docker, Git, General)
 
 Problem:
-(1 line)
+(1 short line)
 
 Quick Fix:
-(1-2 lines)
+(1-2 short lines)
+
+Explanation:
+(short explanation only)
 
 Commands to Run:
-(copy-paste commands only)
+(copy-paste terminal commands only, or "None")
 
 Code Fix:
-(code snippet if needed)
+(code snippet if needed, or "None")
 
 Steps:
-(short steps)
+(short numbered or line-separated steps)
 
 Next Best Action:
-(what user should try next if fix doesn't work)
+(what to try next if this doesn't fix it)
 
 Prevent This:
-(how to avoid this issue in future)
+(how to avoid this problem in future)
 
 Rules:
-- no long explanations
-- focus on action
-- think like fixing production bug fast
+- Be practical, not academic
+- Prefer action over theory
+- Do not write long paragraphs
+- If no commands are needed, write "None"
+- If no code fix is needed, write "None"
 `;
 
-    const userContent = errorText
-      ? `Error:\n${errorText}`
-      : "Analyze the screenshot and explain the issue.";
+    const userPromptParts = [];
+
+    if (errorText && errorText.trim()) {
+      userPromptParts.push(`Error text:\n${errorText.trim()}`);
+    }
+
+    if (imageBase64) {
+      userPromptParts.push(
+        "A screenshot was also provided. Use it if needed to infer the issue."
+      );
+    }
+
+    const userContent = userPromptParts.join("\n\n") || "Analyze the issue.";
+
+    const input = [
+      {
+        role: "system",
+        content: [{ type: "input_text", text: systemPrompt }],
+      },
+    ];
+
+    if (imageBase64) {
+      input.push({
+        role: "user",
+        content: [
+          { type: "input_text", text: userContent },
+          {
+            type: "input_image",
+            image_url: `data:image/png;base64,${imageBase64}`,
+          },
+        ],
+      });
+    } else {
+      input.push({
+        role: "user",
+        content: [{ type: "input_text", text: userContent }],
+      });
+    }
 
     const response = await openai.responses.create({
       model: "gpt-4.1-mini",
-      input: [
-        {
-          role: "system",
-          content: prompt,
-        },
-        {
-          role: "user",
-          content: userContent,
-        },
-      ],
+      input,
     });
 
-    const outputText = response.output_text;
+    const outputText = response.output_text || "";
 
     return {
       raw: outputText,
+      stack: extractSection(outputText, "Stack"),
       problem: extractSection(outputText, "Problem"),
       quickFix: extractSection(outputText, "Quick Fix"),
       explanation: extractSection(outputText, "Explanation"),
@@ -81,7 +118,14 @@ Rules:
 }
 
 function extractSection(text, title) {
-  const regex = new RegExp(`${title}:(.*?)(\\n\\w+:|$)`, "s");
+  if (!text) return "";
+
+  const escapedTitle = escapeRegExp(title);
+  const regex = new RegExp(
+    `${escapedTitle}:\\s*([\\s\\S]*?)(?=\\n[A-Za-z][A-Za-z\\s]+:|$)`,
+    "i"
+  );
+
   const match = text.match(regex);
   return match ? match[1].trim() : "";
 }
@@ -89,7 +133,15 @@ function extractSection(text, title) {
 function extractList(text, title) {
   const section = extractSection(text, title);
   if (!section) return [];
-  return section.split("\n").map((line) => line.trim()).filter(Boolean);
+
+  return section
+    .split("\n")
+    .map((line) => line.replace(/^\d+\.\s*/, "").trim())
+    .filter(Boolean);
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 module.exports = { explainScreenshot };
