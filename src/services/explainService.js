@@ -1,9 +1,11 @@
+const fs = require("fs");
 const OpenAI = require("openai");
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+<<<<<<< HEAD
 async function explainScreenshot({ errorText, imageBase64 }) {
   try {
     const systemPrompt = `
@@ -125,11 +127,23 @@ function extractSection(text, title) {
     `${escapedTitle}:\\s*([\\s\\S]*?)(?=\\n[A-Za-z][A-Za-z\\s]+:|$)`,
     "i"
   );
+=======
+const explainScreenshot = async ({ filePath, errorText }) => {
+  const hasImage = !!filePath;
+  const hasErrorText = !!errorText;
 
-  const match = text.match(regex);
-  return match ? match[1].trim() : "";
-}
+  if (!hasImage && !hasErrorText) {
+    throw new Error("Please provide a screenshot or error text.");
+  }
+>>>>>>> 4fd8900 (Stripe payments working)
 
+  const content = [
+    {
+      type: "text",
+      text: `
+You are an expert senior software engineer and debugging assistant.
+
+<<<<<<< HEAD
 function extractList(text, title) {
   const section = extractSection(text, title);
   if (!section) return [];
@@ -143,5 +157,85 @@ function extractList(text, title) {
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
+=======
+Your job:
+- Analyze the screenshot and/or pasted error text
+- Explain the issue in a simple but useful way
+- Focus on coding, terminal, browser, framework, API, deployment, build, and runtime errors
+- Give practical fixes developers can use immediately
+
+VERY IMPORTANT:
+Return your answer in EXACTLY this format with these section titles and nothing else:
+
+Problem:
+<1 to 3 lines>
+
+Explanation:
+<clear explanation in simple words>
+
+Quick Fix:
+- <short actionable fix 1>
+- <short actionable fix 2>
+- <short actionable fix 3>
+
+Commands to Run:
+<only commands if needed, otherwise write "None">
+
+Solution:
+<the proper full solution>
+
+Steps:
+1. <step one>
+2. <step two>
+3. <step three>
+
+Prevention Tip:
+<one short practical tip>
+
+Rules:
+- Keep Quick Fix very short and immediately useful
+- Commands must be terminal commands only
+- If no commands are needed, write "None"
+- Do not add markdown code fences
+- Do not add extra headings
+- Do not add intro or outro text
+- If the screenshot is unclear, make the best grounded guess and mention uncertainty inside Explanation
+`,
+    },
+  ];
+
+  if (hasErrorText) {
+    content.push({
+      type: "text",
+      text: `User provided error text:\n${errorText}`,
+    });
+  }
+
+  if (hasImage) {
+    const imageBuffer = fs.readFileSync(filePath);
+    const base64Image = imageBuffer.toString("base64");
+
+    content.push({
+      type: "image_url",
+      image_url: {
+        url: `data:image/png;base64,${base64Image}`,
+      },
+    });
+  }
+
+  const response = await openai.chat.completions.create({
+    model: "gpt-4.1-mini",
+    messages: [
+      {
+        role: "user",
+        content,
+      },
+    ],
+    max_tokens: 900,
+  });
+
+  return response.choices[0].message.content;
+};
+>>>>>>> 4fd8900 (Stripe payments working)
 
 module.exports = { explainScreenshot };
