@@ -1,13 +1,12 @@
-const fs = require("fs");
 const OpenAI = require("openai");
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-const explainScreenshot = async ({ filePath, errorText }) => {
-  const hasImage = !!filePath;
-  const hasErrorText = !!errorText;
+const explainScreenshot = async ({ imageBase64, mimeType, errorText }) => {
+  const hasImage = Boolean(imageBase64);
+  const hasErrorText = Boolean(errorText && errorText.trim());
 
   if (!hasImage && !hasErrorText) {
     throw new Error("Please provide a screenshot or error text.");
@@ -25,6 +24,7 @@ Your job:
 - Explain the issue in a simple but useful way
 - Focus on coding, terminal, browser, framework, API, deployment, build, and runtime errors
 - Give practical fixes developers can use immediately
+- If a file name or line number is visible, mention it in the Problem or Explanation
 
 Return valid plain text in EXACTLY this structure:
 
@@ -75,18 +75,15 @@ Rules:
   if (hasErrorText) {
     content.push({
       type: "text",
-      text: `User provided error text:\n${errorText}`,
+      text: `User provided error text:\n${errorText.trim()}`,
     });
   }
 
   if (hasImage) {
-    const imageBuffer = fs.readFileSync(filePath);
-    const base64Image = imageBuffer.toString("base64");
-
     content.push({
       type: "image_url",
       image_url: {
-        url: `data:image/png;base64,${base64Image}`,
+        url: `data:${mimeType || "image/png"};base64,${imageBase64}`,
       },
     });
   }
