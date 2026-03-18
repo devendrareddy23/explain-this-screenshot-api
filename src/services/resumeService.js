@@ -21,22 +21,42 @@ function extractSection(text, startLabel, endLabels = []) {
   return text.slice(contentStart, endIndex).trim();
 }
 
-async function tailorResume({ resumeText, jobDescription }) {
+async function tailorResume({ resumeText, jobDescription, targetRole, locationPreference }) {
   const prompt = `
-You are an expert resume strategist and ATS optimizer.
+You are an expert technical recruiter, ATS evaluator, and resume strategist.
 
-Tailor the user's resume to the given job description.
+You will compare the user's real resume against a job description and return a job match dashboard.
 
 Return the response in EXACTLY this plain text format:
 
 MATCH SCORE:
 <number from 1 to 100>
 
+PRIORITY:
+<High Priority / Apply / Maybe / Skip>
+
+DECISION:
+<one-line direct verdict>
+
 SUGGESTED JOB TITLE:
-<best-fit job title>
+<best-fit job title based on candidate and job>
 
 PROFESSIONAL SUMMARY:
-<3 to 5 lines>
+<3 to 5 lines tailored to the role>
+
+STRENGTHS:
+- strength 1
+- strength 2
+- strength 3
+- strength 4
+- strength 5
+
+GAPS:
+- gap 1
+- gap 2
+- gap 3
+- gap 4
+- gap 5
 
 TAILORED SKILLS:
 - skill 1
@@ -44,12 +64,16 @@ TAILORED SKILLS:
 - skill 3
 - skill 4
 - skill 5
+- skill 6
+- skill 7
+- skill 8
 
 TAILORED EXPERIENCE:
 - bullet 1
 - bullet 2
 - bullet 3
 - bullet 4
+- bullet 5
 
 ATS KEYWORDS MATCHED:
 - keyword 1
@@ -65,15 +89,33 @@ MISSING KEYWORDS:
 - missing keyword 4
 - missing keyword 5
 
+RECOMMENDED IMPROVEMENTS:
+- improvement 1
+- improvement 2
+- improvement 3
+- improvement 4
+- improvement 5
+
 COVER LETTER:
 <short professional cover letter>
 
 RULES:
-- Do not invent fake companies or fake experience.
-- Improve wording, but keep everything believable.
-- Be ATS-friendly.
-- Keep output plain text only.
-- Keep it strong, practical, and professional.
+- Be brutally practical.
+- Do not invent fake companies, fake skills, fake projects, or fake years of experience.
+- Only improve phrasing and positioning using the truth already present in the resume.
+- If the user is weak for the role, say so clearly.
+- Priority should mean:
+  - High Priority = strong fit, user should definitely apply
+  - Apply = good enough fit, worth applying
+  - Maybe = possible but weaker fit
+  - Skip = poor fit, not worth time
+- Keep everything ATS-friendly and plain text only.
+
+USER TARGET ROLE:
+${targetRole || "Not provided"}
+
+USER LOCATION PREFERENCE:
+${locationPreference || "Not provided"}
 
 USER RESUME:
 ${resumeText}
@@ -91,15 +133,17 @@ ${jobDescription}
 
   return {
     rawText,
-    matchScore: extractSection(rawText, "MATCH SCORE:", [
-      "SUGGESTED JOB TITLE:",
-    ]),
+    matchScore: extractSection(rawText, "MATCH SCORE:", ["PRIORITY:"]),
+    priority: extractSection(rawText, "PRIORITY:", ["DECISION:"]),
+    decision: extractSection(rawText, "DECISION:", ["SUGGESTED JOB TITLE:"]),
     suggestedJobTitle: extractSection(rawText, "SUGGESTED JOB TITLE:", [
       "PROFESSIONAL SUMMARY:",
     ]),
     professionalSummary: extractSection(rawText, "PROFESSIONAL SUMMARY:", [
-      "TAILORED SKILLS:",
+      "STRENGTHS:",
     ]),
+    strengths: extractSection(rawText, "STRENGTHS:", ["GAPS:"]),
+    gaps: extractSection(rawText, "GAPS:", ["TAILORED SKILLS:"]),
     tailoredSkills: extractSection(rawText, "TAILORED SKILLS:", [
       "TAILORED EXPERIENCE:",
     ]),
@@ -110,8 +154,13 @@ ${jobDescription}
       "MISSING KEYWORDS:",
     ]),
     missingKeywords: extractSection(rawText, "MISSING KEYWORDS:", [
-      "COVER LETTER:",
+      "RECOMMENDED IMPROVEMENTS:",
     ]),
+    recommendedImprovements: extractSection(
+      rawText,
+      "RECOMMENDED IMPROVEMENTS:",
+      ["COVER LETTER:"]
+    ),
     coverLetter: extractSection(rawText, "COVER LETTER:"),
   };
 }
