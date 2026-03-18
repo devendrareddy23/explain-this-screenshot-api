@@ -8,11 +8,8 @@ const app = express();
 
 app.use(
   cors({
-    origin: [
-      "http://localhost:5173",
-      "https://explain-this-screenshot-ui-otd4.vercel.app",
-    ],
-    methods: ["GET", "POST"],
+    origin: "*",
+    methods: ["GET", "POST", "OPTIONS"],
   })
 );
 
