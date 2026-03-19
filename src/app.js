@@ -3,6 +3,7 @@ const cors = require("cors");
 
 const screenshotRoutes = require("./routes/screenshotRoutes");
 const resumeRoutes = require("./routes/resumeRoutes");
+const jobRoutes = require("./routes/jobRoutes");
 
 const app = express();
 
@@ -25,5 +26,6 @@ app.get("/", (req, res) => {
 
 app.use("/api/screenshots", screenshotRoutes);
 app.use("/api/resume-tailor", resumeRoutes);
+app.use("/api/jobs", jobRoutes);
 
 module.exports = app;
