@@ -1,35 +1,24 @@
-const { explainScreenshot } = require("../services/explainService");
+const { generateExplanation } = require("../services/explainService");
 
-const analyzeScreenshot = async (req, res) => {
+const explainScreenshot = async (req, res) => {
   try {
-    let imageBase64 = "";
-    let mimeType = "";
-    const errorText = req.body?.errorText || "";
+    const { errorText } = req.body || {};
 
-    if (req.file?.buffer) {
-      imageBase64 = req.file.buffer.toString("base64");
-      mimeType = req.file.mimetype || "image/png";
-    }
-
-    if (!imageBase64 && !errorText.trim()) {
+    if (!errorText || !errorText.trim()) {
       return res.status(400).json({
         success: false,
-        message: "Please upload a screenshot or paste error text.",
+        message: "Error text is required.",
       });
     }
 
-    const result = await explainScreenshot({
-      imageBase64,
-      mimeType,
-      errorText,
-    });
+    const explanation = await generateExplanation({ errorText });
 
     return res.status(200).json({
       success: true,
-      result,
+      explanation,
     });
   } catch (error) {
-    console.error("analyzeScreenshot error:", error);
+    console.error("Screenshot explain error:", error.message);
 
     return res.status(500).json({
       success: false,
@@ -40,5 +29,5 @@ const analyzeScreenshot = async (req, res) => {
 };
 
 module.exports = {
-  analyzeScreenshot,
+  explainScreenshot,
 };

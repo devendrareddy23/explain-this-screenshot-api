@@ -1,170 +1,74 @@
 const OpenAI = require("openai");
 
-const client = new OpenAI({
+const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-function extractSection(text, startLabel, endLabels = []) {
-  const startIndex = text.indexOf(startLabel);
-  if (startIndex === -1) return "";
-
-  const contentStart = startIndex + startLabel.length;
-  let endIndex = text.length;
-
-  for (const label of endLabels) {
-    const idx = text.indexOf(label, contentStart);
-    if (idx !== -1 && idx < endIndex) {
-      endIndex = idx;
-    }
-  }
-
-  return text.slice(contentStart, endIndex).trim();
-}
-
-async function tailorResume({ resumeText, jobDescription, targetRole, locationPreference }) {
+const generateTailoredResume = async ({ resumeText, jobDescription }) => {
   const prompt = `
-You are an expert technical recruiter, ATS evaluator, and resume strategist.
+You are an expert backend engineering career assistant.
 
-You will compare the user's real resume against a job description and return a job match dashboard.
+The user will provide:
+1. Their current resume text
+2. A target job description
 
-Return the response in EXACTLY this plain text format:
+Your job:
+- Rewrite the resume to better match the job
+- Keep it realistic and truthful
+- Do not invent fake companies or fake experience
+- Improve wording, relevance, and keyword alignment
+- Make it strong for ATS and recruiters
+
+Return the response in this exact format:
 
 MATCH SCORE:
-<number from 1 to 100>
+<percentage score out of 100>
 
-PRIORITY:
-<High Priority / Apply / Maybe / Skip>
-
-DECISION:
-<one-line direct verdict>
-
-SUGGESTED JOB TITLE:
-<best-fit job title based on candidate and job>
-
-PROFESSIONAL SUMMARY:
-<3 to 5 lines tailored to the role>
-
-STRENGTHS:
-- strength 1
-- strength 2
-- strength 3
-- strength 4
-- strength 5
-
-GAPS:
-- gap 1
-- gap 2
-- gap 3
-- gap 4
-- gap 5
-
-TAILORED SKILLS:
-- skill 1
-- skill 2
-- skill 3
-- skill 4
-- skill 5
-- skill 6
-- skill 7
-- skill 8
-
-TAILORED EXPERIENCE:
-- bullet 1
-- bullet 2
-- bullet 3
-- bullet 4
-- bullet 5
-
-ATS KEYWORDS MATCHED:
+MISSING KEYWORDS:
 - keyword 1
 - keyword 2
 - keyword 3
-- keyword 4
-- keyword 5
 
-MISSING KEYWORDS:
-- missing keyword 1
-- missing keyword 2
-- missing keyword 3
-- missing keyword 4
-- missing keyword 5
+TAILORED SUMMARY:
+<short improved summary>
 
-RECOMMENDED IMPROVEMENTS:
-- improvement 1
-- improvement 2
-- improvement 3
-- improvement 4
-- improvement 5
+TAILORED EXPERIENCE:
+<improved experience bullets>
 
-COVER LETTER:
-<short professional cover letter>
+TAILORED SKILLS:
+<improved skills section>
 
-RULES:
-- Be brutally practical.
-- Do not invent fake companies, fake skills, fake projects, or fake years of experience.
-- Only improve phrasing and positioning using the truth already present in the resume.
-- If the user is weak for the role, say so clearly.
-- Priority should mean:
-  - High Priority = strong fit, user should definitely apply
-  - Apply = good enough fit, worth applying
-  - Maybe = possible but weaker fit
-  - Skip = poor fit, not worth time
-- Keep everything ATS-friendly and plain text only.
+RECRUITER MESSAGE:
+<a short message user can send to recruiter>
 
-USER TARGET ROLE:
-${targetRole || "Not provided"}
+RESUME:
+<full tailored resume version>
 
-USER LOCATION PREFERENCE:
-${locationPreference || "Not provided"}
-
-USER RESUME:
+CURRENT RESUME:
 ${resumeText}
 
 JOB DESCRIPTION:
 ${jobDescription}
 `;
 
-  const response = await client.responses.create({
-    model: "gpt-4.1-mini",
-    input: prompt,
+  const response = await openai.chat.completions.create({
+    model: "gpt-5",
+    messages: [
+      {
+        role: "system",
+        content:
+          "You are a precise resume tailoring assistant for software engineers.",
+      },
+      {
+        role: "user",
+        content: prompt,
+      },
+    ],
   });
 
-  const rawText = response.output_text || "";
-
-  return {
-    rawText,
-    matchScore: extractSection(rawText, "MATCH SCORE:", ["PRIORITY:"]),
-    priority: extractSection(rawText, "PRIORITY:", ["DECISION:"]),
-    decision: extractSection(rawText, "DECISION:", ["SUGGESTED JOB TITLE:"]),
-    suggestedJobTitle: extractSection(rawText, "SUGGESTED JOB TITLE:", [
-      "PROFESSIONAL SUMMARY:",
-    ]),
-    professionalSummary: extractSection(rawText, "PROFESSIONAL SUMMARY:", [
-      "STRENGTHS:",
-    ]),
-    strengths: extractSection(rawText, "STRENGTHS:", ["GAPS:"]),
-    gaps: extractSection(rawText, "GAPS:", ["TAILORED SKILLS:"]),
-    tailoredSkills: extractSection(rawText, "TAILORED SKILLS:", [
-      "TAILORED EXPERIENCE:",
-    ]),
-    tailoredExperience: extractSection(rawText, "TAILORED EXPERIENCE:", [
-      "ATS KEYWORDS MATCHED:",
-    ]),
-    atsKeywordsMatched: extractSection(rawText, "ATS KEYWORDS MATCHED:", [
-      "MISSING KEYWORDS:",
-    ]),
-    missingKeywords: extractSection(rawText, "MISSING KEYWORDS:", [
-      "RECOMMENDED IMPROVEMENTS:",
-    ]),
-    recommendedImprovements: extractSection(
-      rawText,
-      "RECOMMENDED IMPROVEMENTS:",
-      ["COVER LETTER:"]
-    ),
-    coverLetter: extractSection(rawText, "COVER LETTER:"),
-  };
-}
+  return response.choices[0].message.content;
+};
 
 module.exports = {
-  tailorResume,
+  generateTailoredResume,
 };

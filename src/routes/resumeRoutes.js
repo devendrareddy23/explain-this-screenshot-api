@@ -1,8 +1,8 @@
 const express = require("express");
-const { tailorResumeController } = require("../controllers/resumeController");
+const { tailorResume } = require("../controllers/resumeController");
 
 const router = express.Router();
 
-router.post("/", tailorResumeController);
+router.post("/", tailorResume);
 
 module.exports = router;
