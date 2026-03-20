@@ -5,10 +5,12 @@ const {
   runAutoHuntNow,
   runAutoHuntForAllProfiles,
   getSavedAutoHuntJobs,
+  getShortlistedJobs,
+  getAppliedJobs,
   markJobApplied,
   dismissJob,
   shortlistJob,
-  getShortlistedJobs,
+  bulkShortlistJobs,
 } = require("../controllers/indiaAutoHuntController");
 
 const router = express.Router();
@@ -30,9 +32,11 @@ router.get("/deploy-check", (req, res) => {
 router.post("/profile", saveAutoHuntProfile);
 router.post("/run", runAutoHuntNow);
 router.post("/run-all", runAutoHuntForAllProfiles);
+router.post("/bulk-shortlist", bulkShortlistJobs);
 
 router.get("/jobs", getSavedAutoHuntJobs);
 router.get("/shortlisted", getShortlistedJobs);
+router.get("/applied", getAppliedJobs);
 
 router.patch("/apply", markJobApplied);
 router.patch("/dismiss", dismissJob);

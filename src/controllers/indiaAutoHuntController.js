@@ -157,6 +157,7 @@ const getSavedAutoHuntJobs = async (req, res) => {
     const jobs = await AutoHuntJob.find({
       profileEmail: profileEmail.toLowerCase(),
       dismissed: false,
+      applied: false,
     })
       .sort({ score: -1, createdAt: -1 })
       .lean();
@@ -172,6 +173,76 @@ const getSavedAutoHuntJobs = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Failed to fetch saved auto hunt jobs.",
+      error: error.message,
+    });
+  }
+};
+
+const getShortlistedJobs = async (req, res) => {
+  try {
+    const { profileEmail } = req.query;
+
+    if (!profileEmail) {
+      return res.status(400).json({
+        success: false,
+        message: "profileEmail query is required.",
+      });
+    }
+
+    const jobs = await AutoHuntJob.find({
+      profileEmail: profileEmail.toLowerCase(),
+      shortlisted: true,
+      dismissed: false,
+      applied: false,
+    })
+      .sort({ score: -1, updatedAt: -1 })
+      .lean();
+
+    return res.status(200).json({
+      success: true,
+      count: jobs.length,
+      jobs,
+    });
+  } catch (error) {
+    console.error("getShortlistedJobs error:", error.message);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch shortlisted jobs.",
+      error: error.message,
+    });
+  }
+};
+
+const getAppliedJobs = async (req, res) => {
+  try {
+    const { profileEmail } = req.query;
+
+    if (!profileEmail) {
+      return res.status(400).json({
+        success: false,
+        message: "profileEmail query is required.",
+      });
+    }
+
+    const jobs = await AutoHuntJob.find({
+      profileEmail: profileEmail.toLowerCase(),
+      applied: true,
+    })
+      .sort({ updatedAt: -1, score: -1 })
+      .lean();
+
+    return res.status(200).json({
+      success: true,
+      count: jobs.length,
+      jobs,
+    });
+  } catch (error) {
+    console.error("getAppliedJobs error:", error.message);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch applied jobs.",
       error: error.message,
     });
   }
@@ -195,7 +266,7 @@ const markJobApplied = async (req, res) => {
       },
       {
         applied: true,
-        dismissed: false,
+        dismissed: true,
       },
       { new: true }
     );
@@ -315,36 +386,43 @@ const shortlistJob = async (req, res) => {
   }
 };
 
-const getShortlistedJobs = async (req, res) => {
+const bulkShortlistJobs = async (req, res) => {
   try {
-    const { profileEmail } = req.query;
+    const { profileEmail, minimumScore = 0 } = req.body;
 
     if (!profileEmail) {
       return res.status(400).json({
         success: false,
-        message: "profileEmail query is required.",
+        message: "profileEmail is required.",
       });
     }
 
-    const jobs = await AutoHuntJob.find({
-      profileEmail: profileEmail.toLowerCase(),
-      shortlisted: true,
-      dismissed: false,
-    })
-      .sort({ score: -1, updatedAt: -1 })
-      .lean();
+    const result = await AutoHuntJob.updateMany(
+      {
+        profileEmail: profileEmail.toLowerCase(),
+        dismissed: false,
+        applied: false,
+        score: { $gte: Number(minimumScore) || 0 },
+      },
+      {
+        $set: {
+          shortlisted: true,
+        },
+      }
+    );
 
     return res.status(200).json({
       success: true,
-      count: jobs.length,
-      jobs,
+      message: "Bulk shortlist completed successfully.",
+      matchedCount: result.matchedCount || 0,
+      modifiedCount: result.modifiedCount || 0,
     });
   } catch (error) {
-    console.error("getShortlistedJobs error:", error.message);
+    console.error("bulkShortlistJobs error:", error.message);
 
     return res.status(500).json({
       success: false,
-      message: "Failed to fetch shortlisted jobs.",
+      message: "Failed to bulk shortlist jobs.",
       error: error.message,
     });
   }
@@ -355,8 +433,10 @@ module.exports = {
   runAutoHuntNow,
   runAutoHuntForAllProfiles,
   getSavedAutoHuntJobs,
+  getShortlistedJobs,
+  getAppliedJobs,
   markJobApplied,
   dismissJob,
   shortlistJob,
-  getShortlistedJobs,
+  bulkShortlistJobs,
 };
