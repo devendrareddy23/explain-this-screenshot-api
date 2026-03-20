@@ -1,199 +1,202 @@
-import IndiaJob from "../models/IndiaJob.js";
+import Job from "../models/Job.js";
+import { sendJobApplicationEmail } from "../services/emailService.js";
 
-export const deployCheck = async (req, res) => {
-  return res.json({
-    success: true,
-    message: "India Auto Hunt latest route file is active",
-  });
-};
-
-export const getSavedIndiaJobs = async (req, res) => {
+export const getIndiaAutoHuntDeployCheck = async (req, res) => {
   try {
-    const { profileEmail } = req.query;
-
-    if (!profileEmail) {
-      return res.status(400).json({
-        success: false,
-        message: "profileEmail is required",
-      });
-    }
-
-    const jobs = await IndiaJob.find({
-      profileEmail,
-    }).sort({ createdAt: -1 });
-
     return res.json({
       success: true,
-      count: jobs.length,
-      jobs,
+      message: "India Auto Hunt deploy check working",
+      build: process.env.RENDER_GIT_COMMIT || "auto-apply-email-live-v1"
     });
   } catch (error) {
-    console.error("getSavedIndiaJobs error:", error);
     return res.status(500).json({
       success: false,
-      message: "Failed to fetch jobs",
-      error: error.message,
+      message: "Deploy check failed",
+      error: error.message
     });
   }
 };
 
-export const getShortlistedIndiaJobs = async (req, res) => {
+export const getIndiaAutoHuntJobs = async (req, res) => {
   try {
     const { profileEmail } = req.query;
 
     if (!profileEmail) {
       return res.status(400).json({
         success: false,
-        message: "profileEmail is required",
+        message: "profileEmail is required"
       });
     }
 
-    const jobs = await IndiaJob.find({
-      profileEmail,
-      shortlisted: true,
-      applied: { $ne: true },
-    }).sort({ createdAt: -1 });
+    const jobs = await Job.find({ profileEmail, country: "in" })
+      .sort({ updatedAt: -1, createdAt: -1 })
+      .lean();
+
+    const totalJobs = jobs.length;
+    const appliedJobs = jobs.filter((job) => job.applied === true).length;
+    const shortlistedJobs = jobs.filter(
+      (job) => job.status === "shortlisted" && job.applied !== true
+    ).length;
+    const remainingJobs = jobs.filter((job) => job.applied !== true).length;
 
     return res.json({
       success: true,
-      count: jobs.length,
-      jobs,
+      totalJobs,
+      appliedJobs,
+      shortlistedJobs,
+      remainingJobs,
+      jobs
     });
   } catch (error) {
-    console.error("getShortlistedIndiaJobs error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch India Auto Hunt jobs",
+      error: error.message
+    });
+  }
+};
+
+export const getIndiaAutoHuntShortlistedJobs = async (req, res) => {
+  try {
+    const { profileEmail } = req.query;
+
+    if (!profileEmail) {
+      return res.status(400).json({
+        success: false,
+        message: "profileEmail is required"
+      });
+    }
+
+    const jobs = await Job.find({
+      profileEmail,
+      country: "in",
+      status: "shortlisted",
+      applied: { $ne: true }
+    })
+      .sort({ updatedAt: -1, createdAt: -1 })
+      .lean();
+
+    return res.json({
+      success: true,
+      totalJobs: jobs.length,
+      jobs
+    });
+  } catch (error) {
     return res.status(500).json({
       success: false,
       message: "Failed to fetch shortlisted jobs",
-      error: error.message,
+      error: error.message
     });
   }
 };
 
-export const getAppliedIndiaJobs = async (req, res) => {
+export const getIndiaAutoHuntAppliedJobs = async (req, res) => {
   try {
     const { profileEmail } = req.query;
 
     if (!profileEmail) {
       return res.status(400).json({
         success: false,
-        message: "profileEmail is required",
+        message: "profileEmail is required"
       });
     }
 
-    const jobs = await IndiaJob.find({
+    const jobs = await Job.find({
       profileEmail,
-      applied: true,
-    }).sort({ updatedAt: -1, createdAt: -1 });
+      country: "in",
+      applied: true
+    })
+      .sort({ appliedAt: -1, updatedAt: -1, createdAt: -1 })
+      .lean();
 
     return res.json({
       success: true,
-      count: jobs.length,
-      jobs,
+      totalJobs: jobs.length,
+      jobs
     });
   } catch (error) {
-    console.error("getAppliedIndiaJobs error:", error);
     return res.status(500).json({
       success: false,
       message: "Failed to fetch applied jobs",
-      error: error.message,
+      error: error.message
     });
   }
 };
 
-export const shortlistIndiaJobs = async (req, res) => {
+export const applyAllIndiaAutoHuntJobs = async (req, res) => {
   try {
-    const { profileEmail, minimumScore = 60 } = req.body;
-
-    if (!profileEmail) {
-      return res.status(400).json({
-        success: false,
-        message: "profileEmail is required",
-      });
-    }
-
-    const jobs = await IndiaJob.find({
+    const {
       profileEmail,
-      applied: { $ne: true },
-    });
-
-    let shortlistedCount = 0;
-
-    for (const job of jobs) {
-      const score = Number(job.matchScore || job.score || 0);
-
-      if (score >= Number(minimumScore) && job.shortlisted !== true) {
-        job.shortlisted = true;
-        await job.save();
-        shortlistedCount += 1;
-      }
-    }
-
-    return res.json({
-      success: true,
-      message: `Shortlisted ${shortlistedCount} jobs.`,
-      shortlistedCount,
-    });
-  } catch (error) {
-    console.error("shortlistIndiaJobs error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to shortlist jobs",
-      error: error.message,
-    });
-  }
-};
-
-export const applyAllIndiaJobs = async (req, res) => {
-  try {
-    const { profileEmail, source = "shortlisted", minimumScore = 60 } = req.body;
+      source = "shortlisted",
+      minimumScore = 60
+    } = req.body;
 
     if (!profileEmail) {
       return res.status(400).json({
         success: false,
-        message: "profileEmail is required",
+        message: "profileEmail is required"
       });
     }
 
     let query = {
       profileEmail,
-      applied: { $ne: true },
+      country: "in",
+      applied: { $ne: true }
     };
 
     if (source === "shortlisted") {
-      query.shortlisted = true;
-    } else if (source === "saved") {
-      query.shortlisted = { $ne: true };
-    } else {
-      query.$or = [
-        { shortlisted: true },
-        { matchScore: { $gte: Number(minimumScore) } },
-        { score: { $gte: Number(minimumScore) } },
-      ];
+      query.status = "shortlisted";
     }
 
-    const jobs = await IndiaJob.find(query);
+    const jobs = await Job.find(query).sort({ matchScore: -1, updatedAt: -1 });
+
+    const eligibleJobs = jobs.filter(
+      (job) => Number(job.matchScore || 0) >= Number(minimumScore)
+    );
 
     const appliedJobs = [];
 
-    for (const job of jobs) {
-      job.applied = true;
-      job.appliedAt = new Date();
-      await job.save();
-      appliedJobs.push(job);
+    for (const job of eligibleJobs) {
+      try {
+        await sendJobApplicationEmail({
+          to: profileEmail,
+          subject: `Auto Apply Ready: ${job.title} at ${job.company}`,
+          text: [
+            `Company: ${job.company}`,
+            `Role: ${job.title}`,
+            `Location: ${job.location}`,
+            `Match Score: ${job.matchScore}`,
+            `Job URL: ${job.jobUrl || job.redirectUrl || "N/A"}`,
+            "",
+            "This was selected by India Auto Hunt auto-apply."
+          ].join("\n")
+        });
+
+        job.applied = true;
+        job.appliedAt = new Date();
+        job.emailSentAt = new Date();
+        job.status = "applied";
+
+        await job.save();
+
+        appliedJobs.push(job);
+      } catch (emailError) {
+        console.error(`Failed applying for job ${job._id}:`, emailError.message);
+      }
     }
 
     return res.json({
       success: true,
       message: `Apply all completed for ${source} jobs.`,
+      totalEligible: eligibleJobs.length,
       totalApplied: appliedJobs.length,
-      appliedJobs,
+      appliedJobs
     });
   } catch (error) {
-    console.error("applyAllIndiaJobs error:", error);
     return res.status(500).json({
       success: false,
-      message: "Failed to apply all jobs",
-      error: error.message,
+      message: "Failed to apply all India Auto Hunt jobs",
+      error: error.message
     });
   }
 };
