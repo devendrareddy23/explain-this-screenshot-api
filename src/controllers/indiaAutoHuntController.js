@@ -6,7 +6,7 @@ export const getIndiaAutoHuntDeployCheck = async (req, res) => {
     return res.json({
       success: true,
       message: "India Auto Hunt deploy check working",
-      build: process.env.RENDER_GIT_COMMIT || "auto-apply-email-live-v2"
+      build: process.env.RENDER_GIT_COMMIT || "auto-apply-email-live-v3"
     });
   } catch (error) {
     return res.status(500).json({
@@ -129,7 +129,7 @@ export const applyAllIndiaAutoHuntJobs = async (req, res) => {
       profileEmail,
       source = "shortlisted",
       minimumScore = 60
-    } = req.body;
+    } = req.body || {};
 
     if (!profileEmail) {
       return res.status(400).json({
@@ -148,13 +148,27 @@ export const applyAllIndiaAutoHuntJobs = async (req, res) => {
       query.status = "shortlisted";
     }
 
-    const jobs = await Job.find(query).sort({ matchScore: -1, updatedAt: -1 });
+    const rawJobs = await Job.find(query)
+      .sort({ updatedAt: -1, createdAt: -1 })
+      .lean();
 
-    const eligibleJobs = jobs.filter(
-      (job) => Number(job.matchScore || 0) >= Number(minimumScore)
+    const normalizedJobs = rawJobs.map((job) => {
+      const effectiveScore = Number(
+        job.matchScore ?? job.score ?? 0
+      );
+
+      return {
+        ...job,
+        effectiveScore
+      };
+    });
+
+    const eligibleJobs = normalizedJobs.filter(
+      (job) => job.effectiveScore >= Number(minimumScore)
     );
 
     const appliedJobs = [];
+    const failedJobs = [];
 
     for (const job of eligibleJobs) {
       try {
@@ -165,32 +179,58 @@ export const applyAllIndiaAutoHuntJobs = async (req, res) => {
             `Company: ${job.company}`,
             `Role: ${job.title}`,
             `Location: ${job.location || "N/A"}`,
-            `Match Score: ${job.matchScore || 0}`,
+            `Match Score: ${job.effectiveScore}`,
             `Job URL: ${job.jobUrl || job.redirectUrl || "N/A"}`,
             "",
             "This was selected by India Auto Hunt auto-apply."
           ].join("\n")
         });
 
-        job.applied = true;
-        job.appliedAt = new Date();
-        job.emailSentAt = new Date();
-        job.status = "applied";
-
-        await job.save();
+        await Job.updateOne(
+          { _id: job._id },
+          {
+            $set: {
+              applied: true,
+              appliedAt: new Date(),
+              emailSentAt: new Date(),
+              status: "applied"
+            }
+          }
+        );
 
         appliedJobs.push(job);
       } catch (emailError) {
-        console.error("Email/apply failed for job:", job._id?.toString(), emailError.message);
+        failedJobs.push({
+          _id: job._id,
+          title: job.title,
+          company: job.company,
+          error: emailError.message
+        });
       }
     }
 
     return res.json({
       success: true,
       message: "Apply all completed.",
+      debug: {
+        query,
+        minimumScore: Number(minimumScore),
+        rawJobsCount: rawJobs.length,
+        rawJobsPreview: normalizedJobs.map((job) => ({
+          _id: job._id,
+          title: job.title,
+          status: job.status,
+          applied: job.applied,
+          matchScore: job.matchScore ?? null,
+          score: job.score ?? null,
+          effectiveScore: job.effectiveScore
+        }))
+      },
       totalEligible: eligibleJobs.length,
       totalApplied: appliedJobs.length,
-      appliedJobs
+      totalFailed: failedJobs.length,
+      appliedJobs,
+      failedJobs
     });
   } catch (error) {
     return res.status(500).json({
