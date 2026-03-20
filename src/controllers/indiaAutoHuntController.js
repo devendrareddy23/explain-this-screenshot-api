@@ -267,6 +267,8 @@ const markJobApplied = async (req, res) => {
       {
         applied: true,
         dismissed: true,
+        appliedAt: new Date(),
+        applicationMethod: "manual-single",
       },
       { new: true }
     );
@@ -289,6 +291,79 @@ const markJobApplied = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Failed to mark job as applied.",
+      error: error.message,
+    });
+  }
+};
+
+const applyAllJobs = async (req, res) => {
+  try {
+    const {
+      profileEmail,
+      source = "saved",
+      minimumScore = 0,
+    } = req.body;
+
+    if (!profileEmail) {
+      return res.status(400).json({
+        success: false,
+        message: "profileEmail is required.",
+      });
+    }
+
+    const filter = {
+      profileEmail: profileEmail.toLowerCase(),
+      applied: false,
+      score: { $gte: Number(minimumScore) || 0 },
+    };
+
+    if (source === "shortlisted") {
+      filter.shortlisted = true;
+      filter.dismissed = false;
+    } else {
+      filter.dismissed = false;
+    }
+
+    const jobsToApply = await AutoHuntJob.find(filter).lean();
+
+    if (!jobsToApply.length) {
+      return res.status(200).json({
+        success: true,
+        message: "No jobs found to apply.",
+        totalApplied: 0,
+        appliedJobs: [],
+      });
+    }
+
+    await AutoHuntJob.updateMany(filter, {
+      $set: {
+        applied: true,
+        dismissed: true,
+        appliedAt: new Date(),
+        applicationMethod:
+          source === "shortlisted" ? "manual-bulk-shortlisted" : "manual-bulk-saved",
+      },
+    });
+
+    const appliedJobs = await AutoHuntJob.find({
+      profileEmail: profileEmail.toLowerCase(),
+      jobId: { $in: jobsToApply.map((job) => String(job.jobId)) },
+    })
+      .sort({ score: -1, updatedAt: -1 })
+      .lean();
+
+    return res.status(200).json({
+      success: true,
+      message: `Apply all completed for ${source} jobs.`,
+      totalApplied: appliedJobs.length,
+      appliedJobs,
+    });
+  } catch (error) {
+    console.error("applyAllJobs error:", error.message);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to apply all jobs.",
       error: error.message,
     });
   }
@@ -436,6 +511,7 @@ module.exports = {
   getShortlistedJobs,
   getAppliedJobs,
   markJobApplied,
+  applyAllJobs,
   dismissJob,
   shortlistJob,
   bulkShortlistJobs,

@@ -8,6 +8,7 @@ const {
   getShortlistedJobs,
   getAppliedJobs,
   markJobApplied,
+  applyAllJobs,
   dismissJob,
   shortlistJob,
   bulkShortlistJobs,
@@ -33,6 +34,7 @@ router.post("/profile", saveAutoHuntProfile);
 router.post("/run", runAutoHuntNow);
 router.post("/run-all", runAutoHuntForAllProfiles);
 router.post("/bulk-shortlist", bulkShortlistJobs);
+router.post("/apply-all", applyAllJobs);
 
 router.get("/jobs", getSavedAutoHuntJobs);
 router.get("/shortlisted", getShortlistedJobs);
