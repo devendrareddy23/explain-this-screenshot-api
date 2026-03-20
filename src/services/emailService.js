@@ -9,7 +9,10 @@ const createTransporter = () => {
   }
 
   return nodemailer.createTransport({
-    service: "gmail",
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true,
+    family: 4,
     auth: {
       user: emailUser,
       pass: emailPass
@@ -26,8 +29,6 @@ const sendEmail = async ({ to, subject, text }) => {
   }
 
   const transporter = createTransporter();
-
-  await transporter.verify();
 
   const info = await transporter.sendMail({
     from: process.env.EMAIL_USER,
