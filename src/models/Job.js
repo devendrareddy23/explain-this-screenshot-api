@@ -1,98 +1,56 @@
-const mongoose = require("mongoose");
+import mongoose from "mongoose";
 
 const jobSchema = new mongoose.Schema(
   {
-    externalJobId: {
+    jobId: {
       type: String,
-      index: true,
       default: "",
-    },
-    source: {
-      type: String,
-      default: "adzuna",
+      index: true,
     },
     title: {
       type: String,
-      required: true,
-      trim: true,
+      default: "",
     },
     company: {
       type: String,
       default: "",
-      trim: true,
     },
     location: {
       type: String,
       default: "",
-      trim: true,
-    },
-    country: {
-      type: String,
-      default: "in",
-      lowercase: true,
-      trim: true,
-    },
-    url: {
-      type: String,
-      required: true,
-      trim: true,
-      index: true,
     },
     description: {
       type: String,
       default: "",
     },
-    snippet: {
+    jobUrl: {
       type: String,
       default: "",
     },
-    category: {
+    source: {
       type: String,
-      default: "",
+      default: "Adzuna",
     },
-    created: {
+    country: {
       type: String,
-      default: "",
-    },
-    salaryMin: {
-      type: Number,
-      default: null,
-    },
-    salaryMax: {
-      type: Number,
-      default: null,
-    },
-    matchScore: {
-      type: Number,
-      default: 0,
-      index: true,
-    },
-    matchingSkills: {
-      type: [String],
-      default: [],
-    },
-    missingSkills: {
-      type: [String],
-      default: [],
+      default: "in",
     },
     searchQuery: {
       type: String,
       default: "",
-      trim: true,
     },
-    preferredRoles: {
-      type: String,
-      default: "",
+    matchScore: {
+      type: Number,
+      default: 0,
     },
-    preferredLocations: {
-      type: String,
-      default: "",
+    score: {
+      type: Number,
+      default: 0,
     },
     status: {
       type: String,
-      enum: ["new", "shortlisted", "tailored", "applied", "skipped"],
       default: "new",
-      index: true,
+      enum: ["new", "shortlisted", "tailored", "applied", "skipped"],
     },
     tailoredResume: {
       type: String,
@@ -102,9 +60,9 @@ const jobSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
-    fetchedAt: {
-      type: Date,
-      default: Date.now,
+    profileEmail: {
+      type: String,
+      default: "",
       index: true,
     },
   },
@@ -113,7 +71,6 @@ const jobSchema = new mongoose.Schema(
   }
 );
 
-jobSchema.index({ externalJobId: 1, source: 1 }, { unique: true, sparse: true });
-jobSchema.index({ url: 1, source: 1 }, { unique: true });
+const Job = mongoose.models.Job || mongoose.model("Job", jobSchema);
 
-module.exports = mongoose.model("Job", jobSchema);
+export default Job;

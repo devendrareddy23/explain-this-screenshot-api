@@ -1,16 +1,16 @@
-const express = require("express");
-const {
-  saveSearchProfile,
+import express from "express";
+import {
   searchJobs,
+  saveSearchProfile,
   getStoredJobs,
   updateJobStatus,
-} = require("../controllers/jobController");
+} from "../controllers/jobController.js";
 
 const router = express.Router();
 
-router.post("/profile", saveSearchProfile);
 router.post("/search", searchJobs);
-router.get("/", getStoredJobs);
+router.post("/profile", saveSearchProfile);
+router.get("/stored", getStoredJobs);
 router.patch("/:jobId", updateJobStatus);
 
-module.exports = router;
+export default router;

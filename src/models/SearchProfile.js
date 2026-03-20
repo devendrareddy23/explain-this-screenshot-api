@@ -1,32 +1,28 @@
-const mongoose = require("mongoose");
+import mongoose from "mongoose";
 
 const searchProfileSchema = new mongoose.Schema(
   {
     profileName: {
       type: String,
       default: "",
-      trim: true,
     },
     profileEmail: {
       type: String,
-      default: "",
-      trim: true,
+      required: true,
+      unique: true,
       index: true,
     },
     profilePhone: {
       type: String,
       default: "",
-      trim: true,
     },
     profileLinkedIn: {
       type: String,
       default: "",
-      trim: true,
     },
     profileGitHub: {
       type: String,
       default: "",
-      trim: true,
     },
     resumeText: {
       type: String,
@@ -47,8 +43,6 @@ const searchProfileSchema = new mongoose.Schema(
     country: {
       type: String,
       default: "in",
-      lowercase: true,
-      trim: true,
     },
     autoHuntEnabled: {
       type: Boolean,
@@ -57,7 +51,6 @@ const searchProfileSchema = new mongoose.Schema(
     lastSearchQuery: {
       type: String,
       default: "",
-      trim: true,
     },
   },
   {
@@ -65,4 +58,8 @@ const searchProfileSchema = new mongoose.Schema(
   }
 );
 
-module.exports = mongoose.model("SearchProfile", searchProfileSchema);
+const SearchProfile =
+  mongoose.models.SearchProfile ||
+  mongoose.model("SearchProfile", searchProfileSchema);
+
+export default SearchProfile;

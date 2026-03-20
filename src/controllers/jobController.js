@@ -1,11 +1,11 @@
-const SearchProfile = require("../models/SearchProfile");
-const Job = require("../models/Job");
-const {
+import SearchProfile from "../models/SearchProfile.js";
+import Job from "../models/Job.js";
+import {
   searchScoreAndStoreJobs,
   listStoredJobs,
-} = require("../services/jobSearchService");
+} from "../services/jobSearchService.js";
 
-const saveSearchProfile = async (req, res) => {
+export const saveSearchProfile = async (req, res) => {
   try {
     const {
       profileName,
@@ -29,11 +29,13 @@ const saveSearchProfile = async (req, res) => {
       });
     }
 
+    const normalizedEmail = String(profileEmail).trim().toLowerCase();
+
     const profile = await SearchProfile.findOneAndUpdate(
-      { profileEmail: String(profileEmail).trim().toLowerCase() },
+      { profileEmail: normalizedEmail },
       {
         profileName: profileName || "",
-        profileEmail: String(profileEmail).trim().toLowerCase(),
+        profileEmail: normalizedEmail,
         profilePhone: profilePhone || "",
         profileLinkedIn: profileLinkedIn || "",
         profileGitHub: profileGitHub || "",
@@ -63,7 +65,7 @@ const saveSearchProfile = async (req, res) => {
   }
 };
 
-const searchJobs = async (req, res) => {
+export const searchJobs = async (req, res) => {
   try {
     const {
       search,
@@ -98,11 +100,13 @@ const searchJobs = async (req, res) => {
     }
 
     if (profileEmail && String(profileEmail).trim()) {
+      const normalizedEmail = String(profileEmail).trim().toLowerCase();
+
       await SearchProfile.findOneAndUpdate(
-        { profileEmail: String(profileEmail).trim().toLowerCase() },
+        { profileEmail: normalizedEmail },
         {
           profileName: profileName || "",
-          profileEmail: String(profileEmail).trim().toLowerCase(),
+          profileEmail: normalizedEmail,
           profilePhone: profilePhone || "",
           profileLinkedIn: profileLinkedIn || "",
           profileGitHub: profileGitHub || "",
@@ -128,6 +132,7 @@ const searchJobs = async (req, res) => {
       remoteOnly: Boolean(remoteOnly),
       globalSearch: Boolean(globalSearch),
       country: (country || "in").toLowerCase(),
+      profileEmail: profileEmail ? String(profileEmail).trim().toLowerCase() : "",
     });
 
     return res.status(200).json({
@@ -145,7 +150,7 @@ const searchJobs = async (req, res) => {
   }
 };
 
-const getStoredJobs = async (req, res) => {
+export const getStoredJobs = async (req, res) => {
   try {
     const { country, status, minimumScore, limit } = req.query;
 
@@ -171,7 +176,7 @@ const getStoredJobs = async (req, res) => {
   }
 };
 
-const updateJobStatus = async (req, res) => {
+export const updateJobStatus = async (req, res) => {
   try {
     const { jobId } = req.params;
     const { status, tailoredResume, coverNote } = req.body;
@@ -213,11 +218,4 @@ const updateJobStatus = async (req, res) => {
       message: error.message || "Failed to update job.",
     });
   }
-};
-
-module.exports = {
-  saveSearchProfile,
-  searchJobs,
-  getStoredJobs,
-  updateJobStatus,
 };
