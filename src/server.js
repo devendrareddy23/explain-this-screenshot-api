@@ -65,14 +65,14 @@ app.get("/api/test", (req, res) => {
   res.json({
     success: true,
     message: "API test route working",
-    build: "route-debug-v1",
+    build: "render-sync-final-v1",
   });
 });
 
 app.get("/api/build-info", (req, res) => {
   res.json({
     success: true,
-    build: "route-debug-v1",
+    build: "render-sync-final-v1",
     routes: [
       "/api/test",
       "/api/build-info",
