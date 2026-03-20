@@ -7,12 +7,13 @@ import {
   applyAllIndiaAutoHuntJobs
 } from "../controllers/indiaAutoHuntController.js";
 
-const router = express.Router();
+const indiaAutoHuntRoutes = express.Router();
 
-router.get("/deploy-check", getIndiaAutoHuntDeployCheck);
-router.get("/jobs", getIndiaAutoHuntJobs);
-router.get("/shortlisted", getIndiaAutoHuntShortlistedJobs);
-router.get("/applied", getIndiaAutoHuntAppliedJobs);
-router.post("/apply-all", applyAllIndiaAutoHuntJobs);
+indiaAutoHuntRoutes.get("/deploy-check", getIndiaAutoHuntDeployCheck);
+indiaAutoHuntRoutes.get("/jobs", getIndiaAutoHuntJobs);
+indiaAutoHuntRoutes.get("/shortlisted", getIndiaAutoHuntShortlistedJobs);
+indiaAutoHuntRoutes.get("/applied", getIndiaAutoHuntAppliedJobs);
+indiaAutoHuntRoutes.post("/apply-all", applyAllIndiaAutoHuntJobs);
 
-export default router;
+export { indiaAutoHuntRoutes };
+export default indiaAutoHuntRoutes;

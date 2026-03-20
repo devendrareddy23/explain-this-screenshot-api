@@ -6,7 +6,7 @@ export const getIndiaAutoHuntDeployCheck = async (req, res) => {
     return res.json({
       success: true,
       message: "India Auto Hunt deploy check working",
-      build: process.env.RENDER_GIT_COMMIT || "auto-apply-email-live-v1"
+      build: process.env.RENDER_GIT_COMMIT || "auto-apply-email-live-v2"
     });
   } catch (error) {
     return res.status(500).json({
@@ -73,7 +73,7 @@ export const getIndiaAutoHuntShortlistedJobs = async (req, res) => {
       status: "shortlisted",
       applied: { $ne: true }
     })
-      .sort({ updatedAt: -1, createdAt: -1 })
+      .sort({ matchScore: -1, updatedAt: -1, createdAt: -1 })
       .lean();
 
     return res.json({
@@ -138,7 +138,7 @@ export const applyAllIndiaAutoHuntJobs = async (req, res) => {
       });
     }
 
-    let query = {
+    const query = {
       profileEmail,
       country: "in",
       applied: { $ne: true }
@@ -164,8 +164,8 @@ export const applyAllIndiaAutoHuntJobs = async (req, res) => {
           text: [
             `Company: ${job.company}`,
             `Role: ${job.title}`,
-            `Location: ${job.location}`,
-            `Match Score: ${job.matchScore}`,
+            `Location: ${job.location || "N/A"}`,
+            `Match Score: ${job.matchScore || 0}`,
             `Job URL: ${job.jobUrl || job.redirectUrl || "N/A"}`,
             "",
             "This was selected by India Auto Hunt auto-apply."
@@ -181,13 +181,13 @@ export const applyAllIndiaAutoHuntJobs = async (req, res) => {
 
         appliedJobs.push(job);
       } catch (emailError) {
-        console.error(`Failed applying for job ${job._id}:`, emailError.message);
+        console.error("Email/apply failed for job:", job._id?.toString(), emailError.message);
       }
     }
 
     return res.json({
       success: true,
-      message: `Apply all completed for ${source} jobs.`,
+      message: "Apply all completed.",
       totalEligible: eligibleJobs.length,
       totalApplied: appliedJobs.length,
       appliedJobs
@@ -195,7 +195,7 @@ export const applyAllIndiaAutoHuntJobs = async (req, res) => {
   } catch (error) {
     return res.status(500).json({
       success: false,
-      message: "Failed to apply all India Auto Hunt jobs",
+      message: "Failed to apply all jobs",
       error: error.message
     });
   }
