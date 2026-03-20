@@ -13,7 +13,10 @@ const createTransporter = () => {
     auth: {
       user: emailUser,
       pass: emailPass
-    }
+    },
+    connectionTimeout: 30000,
+    greetingTimeout: 30000,
+    socketTimeout: 30000
   });
 };
 
@@ -23,6 +26,8 @@ const sendEmail = async ({ to, subject, text }) => {
   }
 
   const transporter = createTransporter();
+
+  await transporter.verify();
 
   const info = await transporter.sendMail({
     from: process.env.EMAIL_USER,
@@ -39,11 +44,7 @@ const sendEmail = async ({ to, subject, text }) => {
   };
 };
 
-export const sendJobApplicationEmail = async ({
-  to,
-  subject,
-  text
-}) => {
+export const sendJobApplicationEmail = async ({ to, subject, text }) => {
   return sendEmail({
     to,
     subject: subject || "Auto Apply Ready",
@@ -51,11 +52,7 @@ export const sendJobApplicationEmail = async ({
   });
 };
 
-export const sendAutoAppliedEmail = async ({
-  to,
-  subject,
-  text
-}) => {
+export const sendAutoAppliedEmail = async ({ to, subject, text }) => {
   return sendEmail({
     to,
     subject: subject || "Job Auto-Applied Successfully",
