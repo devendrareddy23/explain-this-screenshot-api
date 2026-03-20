@@ -4,7 +4,12 @@ const jobSchema = new mongoose.Schema(
   {
     jobId: {
       type: String,
-      default: "",
+      required: true,
+      index: true,
+    },
+    profileEmail: {
+      type: String,
+      required: true,
       index: true,
     },
     title: {
@@ -23,53 +28,45 @@ const jobSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
-    jobUrl: {
+    redirectUrl: {
       type: String,
       default: "",
     },
     source: {
       type: String,
-      default: "Adzuna",
-    },
-    country: {
-      type: String,
-      default: "in",
-    },
-    searchQuery: {
-      type: String,
-      default: "",
-    },
-    matchScore: {
-      type: Number,
-      default: 0,
+      default: "adzuna",
     },
     score: {
       type: Number,
       default: 0,
     },
-    status: {
-      type: String,
-      default: "new",
-      enum: ["new", "shortlisted", "tailored", "applied", "skipped"],
+    matchReasons: {
+      type: [String],
+      default: [],
     },
-    tailoredResume: {
-      type: String,
-      default: "",
+    applied: {
+      type: Boolean,
+      default: false,
     },
-    coverNote: {
-      type: String,
-      default: "",
+    appliedAt: {
+      type: Date,
+      default: null,
     },
-    profileEmail: {
-      type: String,
-      default: "",
-      index: true,
+    emailSentAt: {
+      type: Date,
+      default: null,
+    },
+    rawJob: {
+      type: Object,
+      default: {},
     },
   },
   {
     timestamps: true,
   }
 );
+
+jobSchema.index({ jobId: 1, profileEmail: 1 }, { unique: true });
 
 const Job = mongoose.models.Job || mongoose.model("Job", jobSchema);
 
