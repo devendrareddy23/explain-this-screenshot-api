@@ -20,8 +20,6 @@ router.get("/jobs", async (req, res) => {
       jobs: [],
     });
   } catch (error) {
-    console.error("India Auto Hunt jobs error:", error.message);
-
     return res.status(500).json({
       success: false,
       message: "Failed to load India Auto Hunt jobs",
