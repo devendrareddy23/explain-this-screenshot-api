@@ -24,7 +24,20 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.get("/", (req, res) => {
-  res.send("Developer Career Toolkit API is running");
+  res.send("Developer Career Toolkit API is running - DEPLOY CHECK DRT-INDIA-001");
+});
+
+app.get("/api/deploy-check", (req, res) => {
+  return res.json({
+    success: true,
+    marker: "DRT-INDIA-001",
+    message: "Latest backend code is live",
+    routes: [
+      "/api/jobs/test",
+      "/api/india-auto-hunt/test",
+      "/api/india-auto-hunt/jobs",
+    ],
+  });
 });
 
 app.use("/api/screenshots", screenshotRoutes);
