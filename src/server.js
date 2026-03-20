@@ -18,6 +18,7 @@ app.get("/", (req, res) => {
   res.json({
     success: true,
     message: "India Auto Hunt + Jobs backend server is running",
+    build: "b258509-jobs-routes-live-check",
   });
 });
 
@@ -25,6 +26,25 @@ app.get("/api/test", (req, res) => {
   res.json({
     success: true,
     message: "API test route working",
+    build: "b258509-jobs-routes-live-check",
+  });
+});
+
+app.get("/api/build-info", (req, res) => {
+  res.json({
+    success: true,
+    build: "b258509-jobs-routes-live-check",
+    routes: [
+      "/api/india-auto-hunt/deploy-check",
+      "/api/india-auto-hunt/jobs",
+      "/api/india-auto-hunt/shortlisted",
+      "/api/india-auto-hunt/applied",
+      "/api/india-auto-hunt/shortlist",
+      "/api/india-auto-hunt/apply-all",
+      "/api/jobs/search",
+      "/api/jobs/profile",
+      "/api/jobs/stored"
+    ]
   });
 });
 
