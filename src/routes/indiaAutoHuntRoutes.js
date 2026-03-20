@@ -1,5 +1,16 @@
 const express = require("express");
 
+const {
+  saveAutoHuntProfile,
+  runAutoHuntNow,
+  runAutoHuntForAllProfiles,
+  getSavedAutoHuntJobs,
+  markJobApplied,
+  dismissJob,
+  shortlistJob,
+  getShortlistedJobs,
+} = require("../controllers/indiaAutoHuntController");
+
 const router = express.Router();
 
 router.get("/test", (req, res) => {
@@ -9,23 +20,22 @@ router.get("/test", (req, res) => {
   });
 });
 
-router.get("/jobs", async (req, res) => {
-  try {
-    const { profileEmail } = req.query;
-
-    return res.json({
-      success: true,
-      message: "India Auto Hunt jobs route is live",
-      profileEmail: profileEmail || null,
-      jobs: [],
-    });
-  } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: "Failed to load India Auto Hunt jobs",
-      error: error.message,
-    });
-  }
+router.get("/deploy-check", (req, res) => {
+  return res.json({
+    success: true,
+    message: "India Auto Hunt latest route file is active",
+  });
 });
+
+router.post("/profile", saveAutoHuntProfile);
+router.post("/run", runAutoHuntNow);
+router.post("/run-all", runAutoHuntForAllProfiles);
+
+router.get("/jobs", getSavedAutoHuntJobs);
+router.get("/shortlisted", getShortlistedJobs);
+
+router.patch("/apply", markJobApplied);
+router.patch("/dismiss", dismissJob);
+router.patch("/shortlist", shortlistJob);
 
 module.exports = router;
