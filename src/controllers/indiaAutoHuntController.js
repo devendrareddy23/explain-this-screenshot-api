@@ -20,8 +20,6 @@ export const getSavedIndiaJobs = async (req, res) => {
 
     const jobs = await IndiaJob.find({
       profileEmail,
-      shortlisted: { $ne: true },
-      applied: { $ne: true },
     }).sort({ createdAt: -1 });
 
     return res.json({
@@ -33,7 +31,7 @@ export const getSavedIndiaJobs = async (req, res) => {
     console.error("getSavedIndiaJobs error:", error);
     return res.status(500).json({
       success: false,
-      message: "Failed to fetch saved jobs",
+      message: "Failed to fetch jobs",
       error: error.message,
     });
   }
@@ -123,7 +121,7 @@ export const shortlistIndiaJobs = async (req, res) => {
     for (const job of jobs) {
       const score = Number(job.matchScore || job.score || 0);
 
-      if (score >= Number(minimumScore)) {
+      if (score >= Number(minimumScore) && job.shortlisted !== true) {
         job.shortlisted = true;
         await job.save();
         shortlistedCount += 1;
