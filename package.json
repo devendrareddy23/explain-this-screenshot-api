@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "description": "Developer Career Toolkit backend with screenshot explainer, resume tailor, jobs, and India Auto Hunt",
   "main": "src/server.js",
-  "type": "module",
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js"
@@ -14,16 +13,17 @@
   "dependencies": {
     "axios": "^1.13.6",
     "bcryptjs": "^3.0.2",
-    "cors": "^2.8.5",
+    "cors": "^2.8.6",
     "dotenv": "^17.3.1",
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.23.0",
-    "multer": "^2.0.2",
+    "multer": "^2.1.1",
     "node-cron": "^4.2.1",
     "nodemailer": "^8.0.3",
-    "openai": "^5.12.2",
-    "stripe": "^18.4.0"
+    "openai": "^5.23.2",
+    "stripe": "^18.5.0",
+    "xml2js": "^0.6.2"
   },
   "devDependencies": {
     "nodemon": "^3.1.10"

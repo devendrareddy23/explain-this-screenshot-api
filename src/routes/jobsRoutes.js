@@ -1,20 +1,14 @@
 const express = require("express");
+const {
+  searchJobs,
+  getStoredJobs,
+  getJobsProfile,
+} = require("../controllers/jobsController");
 
 const router = express.Router();
 
-router.get("/test", (req, res) => {
-  return res.json({
-    success: true,
-    message: "jobsRoutes is working",
-  });
-});
-
-router.post("/search", async (req, res) => {
-  return res.json({
-    success: true,
-    message: "Temporary jobs search route is live",
-    jobs: [],
-  });
-});
+router.post("/search", searchJobs);
+router.get("/stored", getStoredJobs);
+router.get("/profile", getJobsProfile);
 
 module.exports = router;

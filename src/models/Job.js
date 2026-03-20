@@ -1,16 +1,28 @@
-import mongoose from "mongoose";
+const mongoose = require("mongoose");
 
 const jobSchema = new mongoose.Schema(
   {
     jobId: {
       type: String,
-      required: true,
-      index: true,
+      trim: true,
+      default: undefined,
     },
     profileEmail: {
       type: String,
-      required: true,
-      index: true,
+      trim: true,
+      default: undefined,
+    },
+    source: {
+      type: String,
+      default: "",
+    },
+    externalId: {
+      type: String,
+      default: "",
+    },
+    searchQuery: {
+      type: String,
+      default: "",
     },
     title: {
       type: String,
@@ -24,7 +36,43 @@ const jobSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    category: {
+      type: String,
+      default: "",
+    },
+    type: {
+      type: String,
+      default: "",
+    },
+    salary: {
+      type: String,
+      default: "",
+    },
+    publicationDate: {
+      type: String,
+      default: "",
+    },
+    descriptionSnippet: {
+      type: String,
+      default: "",
+    },
+    tags: {
+      type: [String],
+      default: [],
+    },
     description: {
+      type: String,
+      default: "",
+    },
+    country: {
+      type: String,
+      default: "global",
+    },
+    jobUrl: {
+      type: String,
+      default: "",
+    },
+    url: {
       type: String,
       default: "",
     },
@@ -32,11 +80,11 @@ const jobSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
-    source: {
-      type: String,
-      default: "adzuna",
-    },
     score: {
+      type: Number,
+      default: 0,
+    },
+    matchScore: {
       type: Number,
       default: 0,
     },
@@ -44,20 +92,24 @@ const jobSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    status: {
+      type: String,
+      default: "new",
+    },
     applied: {
       type: Boolean,
       default: false,
     },
-    appliedAt: {
-      type: Date,
-      default: null,
+    coverNote: {
+      type: String,
+      default: "",
     },
-    emailSentAt: {
-      type: Date,
-      default: null,
+    tailoredResume: {
+      type: String,
+      default: "",
     },
     rawJob: {
-      type: Object,
+      type: mongoose.Schema.Types.Mixed,
       default: {},
     },
   },
@@ -66,8 +118,18 @@ const jobSchema = new mongoose.Schema(
   }
 );
 
-jobSchema.index({ jobId: 1, profileEmail: 1 }, { unique: true });
+jobSchema.index({ url: 1 }, { unique: true, sparse: true });
 
-const Job = mongoose.models.Job || mongoose.model("Job", jobSchema);
+jobSchema.index(
+  { jobId: 1, profileEmail: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      jobId: { $gt: "" },
+      profileEmail: { $gt: "" },
+    },
+  }
+);
 
-export default Job;
+module.exports =
+  mongoose.models.Job || mongoose.model("Job", jobSchema);

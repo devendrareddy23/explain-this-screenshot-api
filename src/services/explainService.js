@@ -1,54 +1,65 @@
 const OpenAI = require("openai");
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+function getOpenAIClient() {
+  const apiKey = process.env.OPENAI_API_KEY;
 
-const generateExplanation = async ({ errorText }) => {
-  const prompt = `
-You are an expert software debugging assistant.
+  if (!apiKey) {
+    return null;
+  }
 
-The user will give you an error message or coding issue.
+  return new OpenAI({ apiKey });
+}
 
-Return the answer in this exact format:
+async function generateExplanation({ imageBase64, mimeType, errorText }) {
+  const client = getOpenAIClient();
 
-Problem:
-<what the problem is>
+  if (!client) {
+    throw new Error("OPENAI_API_KEY is missing in local environment.");
+  }
 
-Explanation:
-<simple explanation>
+  const userParts = [];
 
-Commands to Run:
-<commands if needed, otherwise write None>
+  if (errorText && String(errorText).trim()) {
+    userParts.push({
+      type: "text",
+      text: `User provided error text:\n${String(errorText).trim()}`
+    });
+  }
 
-Solution:
-<best solution>
+  if (imageBase64) {
+    userParts.push({
+      type: "image_url",
+      image_url: {
+        url: `data:${mimeType || "image/png"};base64,${imageBase64}`
+      }
+    });
+  }
 
-Steps:
-1. step one
-2. step two
-3. step three
+  if (userParts.length === 0) {
+    userParts.push({
+      type: "text",
+      text: "No screenshot was provided. Analyze the pasted error text only."
+    });
+  }
 
-ERROR:
-${errorText}
-`;
-
-  const response = await openai.chat.completions.create({
-    model: "gpt-5",
+  const response = await client.chat.completions.create({
+    model: "gpt-4o-mini",
     messages: [
       {
         role: "system",
-        content: "You are a precise debugging assistant for developers.",
+        content:
+          "You are a senior software engineer helping developers debug coding errors from screenshots or pasted errors. Return a practical developer-friendly answer with these exact sections: Stack, Problem, Quick Fix, Explanation, Commands to Run, Solution, Steps. Keep commands concise and actionable. If commands are not needed, say None."
       },
       {
         role: "user",
-        content: prompt,
-      },
+        content: userParts
+      }
     ],
+    temperature: 0.2
   });
 
-  return response.choices[0].message.content;
-};
+  return response.choices?.[0]?.message?.content || "No explanation generated.";
+}
 
 module.exports = {
   generateExplanation,

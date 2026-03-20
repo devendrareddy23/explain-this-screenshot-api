@@ -1,73 +1,40 @@
 const OpenAI = require("openai");
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+function getOpenAIClient() {
+  const apiKey = process.env.OPENAI_API_KEY;
 
-const generateTailoredResume = async ({ resumeText, jobDescription }) => {
-  const prompt = `
-You are an expert backend engineering career assistant.
+  if (!apiKey) {
+    return null;
+  }
 
-The user will provide:
-1. Their current resume text
-2. A target job description
+  return new OpenAI({ apiKey });
+}
 
-Your job:
-- Rewrite the resume to better match the job
-- Keep it realistic and truthful
-- Do not invent fake companies or fake experience
-- Improve wording, relevance, and keyword alignment
-- Make it strong for ATS and recruiters
+async function generateTailoredResume({ resumeText, jobDescription }) {
+  const client = getOpenAIClient();
 
-Return the response in this exact format:
+  if (!client) {
+    throw new Error("OPENAI_API_KEY is missing in local environment.");
+  }
 
-MATCH SCORE:
-<percentage score out of 100>
-
-MISSING KEYWORDS:
-- keyword 1
-- keyword 2
-- keyword 3
-
-TAILORED SUMMARY:
-<short improved summary>
-
-TAILORED EXPERIENCE:
-<improved experience bullets>
-
-TAILORED SKILLS:
-<improved skills section>
-
-RECRUITER MESSAGE:
-<a short message user can send to recruiter>
-
-RESUME:
-<full tailored resume version>
-
-CURRENT RESUME:
-${resumeText}
-
-JOB DESCRIPTION:
-${jobDescription}
-`;
-
-  const response = await openai.chat.completions.create({
-    model: "gpt-5",
+  const response = await client.chat.completions.create({
+    model: "gpt-4o-mini",
+    temperature: 0.3,
     messages: [
       {
         role: "system",
         content:
-          "You are a precise resume tailoring assistant for software engineers.",
+          "You are an expert resume tailoring assistant. Rewrite the resume to better match the job description without inventing fake experience. Return structured output with these exact sections: Professional Summary, Key Skills, Tailored Experience Points, Suggested Projects, ATS Keywords."
       },
       {
         role: "user",
-        content: prompt,
-      },
-    ],
+        content: `RESUME:\n${resumeText || ""}\n\nJOB DESCRIPTION:\n${jobDescription || ""}`
+      }
+    ]
   });
 
-  return response.choices[0].message.content;
-};
+  return response.choices?.[0]?.message?.content || "No tailored resume generated.";
+}
 
 module.exports = {
   generateTailoredResume,

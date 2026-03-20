@@ -1,27 +1,31 @@
-import mongoose from "mongoose";
+const mongoose = require("mongoose");
 
 const searchProfileSchema = new mongoose.Schema(
   {
     profileName: {
       type: String,
+      trim: true,
       default: "",
     },
     profileEmail: {
       type: String,
       required: true,
-      unique: true,
+      trim: true,
       index: true,
     },
     profilePhone: {
       type: String,
+      trim: true,
       default: "",
     },
     profileLinkedIn: {
       type: String,
+      trim: true,
       default: "",
     },
     profileGitHub: {
       type: String,
+      trim: true,
       default: "",
     },
     resumeText: {
@@ -29,28 +33,25 @@ const searchProfileSchema = new mongoose.Schema(
       default: "",
     },
     preferredRoles: {
-      type: String,
-      default: "",
+      type: [String],
+      default: [],
     },
     preferredLocations: {
-      type: String,
-      default: "",
+      type: [String],
+      default: [],
     },
     minimumScore: {
       type: Number,
-      default: 50,
+      default: 60,
     },
-    country: {
-      type: String,
-      default: "in",
-    },
-    autoHuntEnabled: {
+    remoteOnly: {
       type: Boolean,
       default: false,
     },
-    lastSearchQuery: {
+    country: {
       type: String,
-      default: "",
+      trim: true,
+      default: "in",
     },
   },
   {
@@ -58,8 +59,6 @@ const searchProfileSchema = new mongoose.Schema(
   }
 );
 
-const SearchProfile =
+module.exports =
   mongoose.models.SearchProfile ||
   mongoose.model("SearchProfile", searchProfileSchema);
-
-export default SearchProfile;
