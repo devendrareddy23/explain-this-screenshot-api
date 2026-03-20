@@ -6,7 +6,7 @@ export const getIndiaAutoHuntDeployCheck = async (req, res) => {
     return res.json({
       success: true,
       message: "India Auto Hunt deploy check working",
-      build: process.env.RENDER_GIT_COMMIT || "auto-apply-email-live-v3"
+      build: process.env.RENDER_GIT_COMMIT || "auto-apply-email-live-v4"
     });
   } catch (error) {
     return res.status(500).json({
@@ -153,14 +153,8 @@ export const applyAllIndiaAutoHuntJobs = async (req, res) => {
       .lean();
 
     const normalizedJobs = rawJobs.map((job) => {
-      const effectiveScore = Number(
-        job.matchScore ?? job.score ?? 0
-      );
-
-      return {
-        ...job,
-        effectiveScore
-      };
+      const effectiveScore = Number(job.matchScore ?? job.score ?? 0);
+      return { ...job, effectiveScore };
     });
 
     const eligibleJobs = normalizedJobs.filter(
@@ -172,39 +166,71 @@ export const applyAllIndiaAutoHuntJobs = async (req, res) => {
 
     for (const job of eligibleJobs) {
       try {
-        await sendJobApplicationEmail({
-          to: profileEmail,
-          subject: `Auto Apply Ready: ${job.title} at ${job.company}`,
-          text: [
-            `Company: ${job.company}`,
-            `Role: ${job.title}`,
-            `Location: ${job.location || "N/A"}`,
-            `Match Score: ${job.effectiveScore}`,
-            `Job URL: ${job.jobUrl || job.redirectUrl || "N/A"}`,
-            "",
-            "This was selected by India Auto Hunt auto-apply."
-          ].join("\n")
-        });
-
         await Job.updateOne(
           { _id: job._id },
           {
             $set: {
               applied: true,
               appliedAt: new Date(),
-              emailSentAt: new Date(),
               status: "applied"
             }
           }
         );
 
-        appliedJobs.push(job);
-      } catch (emailError) {
+        let emailStatus = "sent";
+        let emailError = null;
+
+        try {
+          await sendJobApplicationEmail({
+            to: profileEmail,
+            subject: `Auto Apply Ready: ${job.title} at ${job.company}`,
+            text: [
+              `Company: ${job.company}`,
+              `Role: ${job.title}`,
+              `Location: ${job.location || "N/A"}`,
+              `Match Score: ${job.effectiveScore}`,
+              `Job URL: ${job.jobUrl || job.redirectUrl || "N/A"}`,
+              "",
+              "This was selected by India Auto Hunt auto-apply."
+            ].join("\n")
+          });
+
+          await Job.updateOne(
+            { _id: job._id },
+            {
+              $set: {
+                emailSentAt: new Date(),
+                emailStatus: "sent",
+                emailError: null
+              }
+            }
+          );
+        } catch (emailErr) {
+          emailStatus = "failed";
+          emailError = emailErr.message;
+
+          await Job.updateOne(
+            { _id: job._id },
+            {
+              $set: {
+                emailStatus: "failed",
+                emailError: emailErr.message
+              }
+            }
+          );
+        }
+
+        appliedJobs.push({
+          ...job,
+          emailStatus,
+          emailError
+        });
+      } catch (applyError) {
         failedJobs.push({
           _id: job._id,
           title: job.title,
           company: job.company,
-          error: emailError.message
+          error: applyError.message
         });
       }
     }
