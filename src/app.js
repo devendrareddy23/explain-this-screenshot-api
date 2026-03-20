@@ -24,7 +24,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.get("/", (req, res) => {
-  res.send("Developer Career Toolkit API is running - DEPLOY CHECK DRT-INDIA-001");
+  res.send("Developer Career Toolkit API is running - FORCE MARKER INDIA-999");
 });
 
 app.get("/api/deploy-check", (req, res) => {
