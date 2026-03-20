@@ -2,29 +2,32 @@ const express = require("express");
 
 const router = express.Router();
 
+/**
+ * Health/test route for jobs
+ */
 router.get("/test", (req, res) => {
   return res.json({
     success: true,
-    message: "India Auto Hunt route is working",
+    message: "jobsRoutes is working",
   });
 });
 
-router.get("/jobs", async (req, res) => {
+/**
+ * Temporary search route
+ */
+router.post("/search", async (req, res) => {
   try {
-    const { profileEmail } = req.query;
-
     return res.json({
       success: true,
-      message: "India Auto Hunt jobs route is live",
-      profileEmail: profileEmail || null,
+      message: "Temporary jobs search route is live",
       jobs: [],
     });
   } catch (error) {
-    console.error("India Auto Hunt jobs error:", error.message);
+    console.error("Jobs search error:", error.message);
 
     return res.status(500).json({
       success: false,
-      message: "Failed to load India Auto Hunt jobs",
+      message: "Failed to search jobs",
       error: error.message,
     });
   }
