@@ -1,4 +1,67 @@
-const { searchAndScoreJobs } = require("../services/jobSearchService");
+const SearchProfile = require("../models/SearchProfile");
+const Job = require("../models/Job");
+const {
+  searchScoreAndStoreJobs,
+  listStoredJobs,
+} = require("../services/jobSearchService");
+
+const saveSearchProfile = async (req, res) => {
+  try {
+    const {
+      profileName,
+      profileEmail,
+      profilePhone,
+      profileLinkedIn,
+      profileGitHub,
+      resumeText,
+      preferredRoles,
+      preferredLocations,
+      minimumScore,
+      country,
+      autoHuntEnabled,
+      lastSearchQuery,
+    } = req.body;
+
+    if (!profileEmail || !String(profileEmail).trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "profileEmail is required.",
+      });
+    }
+
+    const profile = await SearchProfile.findOneAndUpdate(
+      { profileEmail: String(profileEmail).trim().toLowerCase() },
+      {
+        profileName: profileName || "",
+        profileEmail: String(profileEmail).trim().toLowerCase(),
+        profilePhone: profilePhone || "",
+        profileLinkedIn: profileLinkedIn || "",
+        profileGitHub: profileGitHub || "",
+        resumeText: resumeText || "",
+        preferredRoles: preferredRoles || "",
+        preferredLocations: preferredLocations || "",
+        minimumScore: Number(minimumScore) || 50,
+        country: (country || "in").toLowerCase(),
+        autoHuntEnabled: Boolean(autoHuntEnabled),
+        lastSearchQuery: lastSearchQuery || "",
+      },
+      { new: true, upsert: true }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Search profile saved successfully.",
+      profile,
+    });
+  } catch (error) {
+    console.error("Save search profile error:", error.message);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to save search profile.",
+    });
+  }
+};
 
 const searchJobs = async (req, res) => {
   try {
@@ -16,6 +79,8 @@ const searchJobs = async (req, res) => {
       minimumScore,
       remoteOnly,
       globalSearch,
+      country,
+      autoHuntEnabled,
     } = req.body;
 
     if (!resumeText || !String(resumeText).trim()) {
@@ -32,20 +97,37 @@ const searchJobs = async (req, res) => {
       });
     }
 
-    const result = await searchAndScoreJobs({
+    if (profileEmail && String(profileEmail).trim()) {
+      await SearchProfile.findOneAndUpdate(
+        { profileEmail: String(profileEmail).trim().toLowerCase() },
+        {
+          profileName: profileName || "",
+          profileEmail: String(profileEmail).trim().toLowerCase(),
+          profilePhone: profilePhone || "",
+          profileLinkedIn: profileLinkedIn || "",
+          profileGitHub: profileGitHub || "",
+          resumeText: String(resumeText),
+          preferredRoles: preferredRoles || "",
+          preferredLocations: preferredLocations || "",
+          minimumScore: Number(minimumScore) || 50,
+          country: (country || "in").toLowerCase(),
+          autoHuntEnabled: Boolean(autoHuntEnabled),
+          lastSearchQuery: String(search).trim(),
+        },
+        { new: true, upsert: true }
+      );
+    }
+
+    const result = await searchScoreAndStoreJobs({
       search: String(search).trim(),
       limit: Number(limit) || 10,
-      profileName: profileName || "",
-      profileEmail: profileEmail || "",
-      profilePhone: profilePhone || "",
-      profileLinkedIn: profileLinkedIn || "",
-      profileGitHub: profileGitHub || "",
       resumeText: String(resumeText),
       preferredRoles: preferredRoles || "",
       preferredLocations: preferredLocations || "",
       minimumScore: Number(minimumScore) || 0,
       remoteOnly: Boolean(remoteOnly),
       globalSearch: Boolean(globalSearch),
+      country: (country || "in").toLowerCase(),
     });
 
     return res.status(200).json({
@@ -63,6 +145,79 @@ const searchJobs = async (req, res) => {
   }
 };
 
+const getStoredJobs = async (req, res) => {
+  try {
+    const { country, status, minimumScore, limit } = req.query;
+
+    const jobs = await listStoredJobs({
+      country,
+      status,
+      minimumScore,
+      limit,
+    });
+
+    return res.status(200).json({
+      success: true,
+      count: jobs.length,
+      jobs,
+    });
+  } catch (error) {
+    console.error("Get stored jobs error:", error.message);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to fetch stored jobs.",
+    });
+  }
+};
+
+const updateJobStatus = async (req, res) => {
+  try {
+    const { jobId } = req.params;
+    const { status, tailoredResume, coverNote } = req.body;
+
+    const allowedStatuses = ["new", "shortlisted", "tailored", "applied", "skipped"];
+
+    if (status && !allowedStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid status value.",
+      });
+    }
+
+    const job = await Job.findById(jobId);
+
+    if (!job) {
+      return res.status(404).json({
+        success: false,
+        message: "Job not found.",
+      });
+    }
+
+    if (status) job.status = status;
+    if (typeof tailoredResume === "string") job.tailoredResume = tailoredResume;
+    if (typeof coverNote === "string") job.coverNote = coverNote;
+
+    await job.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Job updated successfully.",
+      job,
+    });
+  } catch (error) {
+    console.error("Update job status error:", error.message);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to update job.",
+    });
+  }
+};
+
 module.exports = {
+  saveSearchProfile,
   searchJobs,
+  getStoredJobs,
+  updateJobStatus,
 };

@@ -2,15 +2,14 @@ const mongoose = require("mongoose");
 
 const jobSchema = new mongoose.Schema(
   {
+    externalJobId: {
+      type: String,
+      index: true,
+      default: "",
+    },
     source: {
       type: String,
-      required: true,
-      trim: true,
-    },
-    externalId: {
-      type: String,
-      default: "",
-      trim: true,
+      default: "adzuna",
     },
     title: {
       type: String,
@@ -27,38 +26,86 @@ const jobSchema = new mongoose.Schema(
       default: "",
       trim: true,
     },
-    category: {
+    country: {
       type: String,
-      default: "",
-      trim: true,
-    },
-    type: {
-      type: String,
-      default: "",
-      trim: true,
-    },
-    salary: {
-      type: String,
-      default: "",
+      default: "in",
+      lowercase: true,
       trim: true,
     },
     url: {
       type: String,
       required: true,
       trim: true,
+      index: true,
     },
-    publicationDate: {
+    description: {
+      type: String,
+      default: "",
+    },
+    snippet: {
+      type: String,
+      default: "",
+    },
+    category: {
+      type: String,
+      default: "",
+    },
+    created: {
+      type: String,
+      default: "",
+    },
+    salaryMin: {
+      type: Number,
+      default: null,
+    },
+    salaryMax: {
+      type: Number,
+      default: null,
+    },
+    matchScore: {
+      type: Number,
+      default: 0,
+      index: true,
+    },
+    matchingSkills: {
+      type: [String],
+      default: [],
+    },
+    missingSkills: {
+      type: [String],
+      default: [],
+    },
+    searchQuery: {
       type: String,
       default: "",
       trim: true,
     },
-    descriptionSnippet: {
+    preferredRoles: {
       type: String,
       default: "",
     },
-    tags: {
-      type: [String],
-      default: [],
+    preferredLocations: {
+      type: String,
+      default: "",
+    },
+    status: {
+      type: String,
+      enum: ["new", "shortlisted", "tailored", "applied", "skipped"],
+      default: "new",
+      index: true,
+    },
+    tailoredResume: {
+      type: String,
+      default: "",
+    },
+    coverNote: {
+      type: String,
+      default: "",
+    },
+    fetchedAt: {
+      type: Date,
+      default: Date.now,
+      index: true,
     },
   },
   {
@@ -66,7 +113,7 @@ const jobSchema = new mongoose.Schema(
   }
 );
 
-jobSchema.index({ source: 1, externalId: 1 });
-jobSchema.index({ url: 1 }, { unique: true });
+jobSchema.index({ externalJobId: 1, source: 1 }, { unique: true, sparse: true });
+jobSchema.index({ url: 1, source: 1 }, { unique: true });
 
 module.exports = mongoose.model("Job", jobSchema);

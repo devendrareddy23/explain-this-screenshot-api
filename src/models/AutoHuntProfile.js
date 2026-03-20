@@ -1,68 +1,60 @@
 const mongoose = require("mongoose");
 
-const searchProfileSchema = new mongoose.Schema(
+const autoHuntProfileSchema = new mongoose.Schema(
   {
     profileName: {
       type: String,
-      default: "",
+      required: true,
       trim: true,
     },
     profileEmail: {
       type: String,
-      default: "",
+      required: true,
       trim: true,
-      index: true,
+      lowercase: true,
     },
     profilePhone: {
       type: String,
-      default: "",
       trim: true,
+      default: "",
     },
     profileLinkedIn: {
       type: String,
-      default: "",
       trim: true,
+      default: "",
     },
     profileGitHub: {
       type: String,
-      default: "",
       trim: true,
+      default: "",
     },
     resumeText: {
       type: String,
-      default: "",
+      required: true,
+      trim: true,
     },
     preferredRoles: {
-      type: String,
-      default: "",
+      type: [String],
+      default: [],
     },
     preferredLocations: {
-      type: String,
-      default: "",
+      type: [String],
+      default: ["India", "Remote"],
     },
     minimumScore: {
       type: Number,
-      default: 50,
+      default: 80,
     },
-    country: {
-      type: String,
-      default: "in",
-      lowercase: true,
-      trim: true,
-    },
-    autoHuntEnabled: {
+    remoteOnly: {
       type: Boolean,
       default: false,
     },
-    lastSearchQuery: {
-      type: String,
-      default: "",
-      trim: true,
+    isActive: {
+      type: Boolean,
+      default: true,
     },
   },
-  {
-    timestamps: true,
-  }
+  { timestamps: true }
 );
 
-module.exports = mongoose.model("SearchProfile", searchProfileSchema);
+module.exports = mongoose.model("AutoHuntProfile", autoHuntProfileSchema);

@@ -1,3 +1,5 @@
+const Job = require("../models/Job");
+
 const ADZUNA_BASE_URL = "https://api.adzuna.com/v1/api";
 
 const KNOWN_SKILLS = [
@@ -39,6 +41,8 @@ const KNOWN_SKILLS = [
   "microservices",
   "cloud",
   "backend",
+  "fastify",
+  "graphql",
 ];
 
 function normalizeText(value = "") {
@@ -49,12 +53,17 @@ function uniqueArray(values) {
   return [...new Set(values.filter(Boolean))];
 }
 
+function parseCommaSeparated(value = "") {
+  return String(value)
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 function extractSkillsFromResume(resumeText = "") {
   const text = normalizeText(resumeText);
 
-  return uniqueArray(
-    KNOWN_SKILLS.filter((skill) => text.includes(skill))
-  );
+  return uniqueArray(KNOWN_SKILLS.filter((skill) => text.includes(skill)));
 }
 
 function extractSkillsFromJob(job) {
@@ -69,16 +78,7 @@ function extractSkillsFromJob(job) {
       .join(" ")
   );
 
-  return uniqueArray(
-    KNOWN_SKILLS.filter((skill) => sourceText.includes(skill))
-  );
-}
-
-function parseCommaSeparated(value = "") {
-  return String(value)
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
+  return uniqueArray(KNOWN_SKILLS.filter((skill) => sourceText.includes(skill)));
 }
 
 function matchesPreferredLocation(jobLocation = "", preferredLocations = "") {
@@ -107,7 +107,6 @@ function computeJobScore({
   resumeSkills,
   preferredRoles,
   preferredLocations,
-  minimumScore,
   searchQuery,
 }) {
   const title = normalizeText(job.title);
@@ -130,12 +129,15 @@ function computeJobScore({
     if (matchedRole) score += 25;
   }
 
-  const searchTokens = parseCommaSeparated(searchQuery.replace(/\s+/g, ",")).map((token) =>
-    token.toLowerCase()
-  );
+  const searchTokens = parseCommaSeparated(
+    String(searchQuery || "").replace(/\s+/g, ",")
+  ).map((token) => token.toLowerCase());
 
   if (searchTokens.length > 0) {
-    const tokenMatches = searchTokens.filter((token) => fullJobText.includes(token)).length;
+    const tokenMatches = searchTokens.filter((token) =>
+      fullJobText.includes(token)
+    ).length;
+
     score += Math.min(tokenMatches * 5, 20);
   }
 
@@ -162,26 +164,6 @@ function computeJobScore({
     score,
     matchingSkills,
     missingSkills,
-    passesMinimumScore: score >= Number(minimumScore || 0),
-  };
-}
-
-function mapAdzunaJob(job, scoring) {
-  return {
-    id: job.id,
-    title: job.title || "Untitled Role",
-    company: job.company?.display_name || "Unknown Company",
-    location: job.location?.display_name || "Unknown Location",
-    url: job.redirect_url || "",
-    description: job.description || "",
-    snippet: job.description || "",
-    category: job.category?.label || "",
-    created: job.created || "",
-    salaryMin: job.salary_min ?? null,
-    salaryMax: job.salary_max ?? null,
-    matchScore: scoring.score,
-    matchingSkills: scoring.matchingSkills,
-    missingSkills: scoring.missingSkills,
   };
 }
 
@@ -190,15 +172,14 @@ async function fetchAdzunaJobs({
   limit,
   preferredLocations,
   remoteOnly,
+  country,
 }) {
   const appId = process.env.ADZUNA_APP_ID;
   const appKey = process.env.ADZUNA_APP_KEY;
-  const country = process.env.ADZUNA_COUNTRY || "us";
+  const selectedCountry = (country || process.env.ADZUNA_COUNTRY || "in").toLowerCase();
 
   if (!appId || !appKey) {
-    throw new Error(
-      "Missing ADZUNA_APP_ID or ADZUNA_APP_KEY in environment variables."
-    );
+    throw new Error("Missing ADZUNA_APP_ID or ADZUNA_APP_KEY in environment variables.");
   }
 
   const params = new URLSearchParams({
@@ -215,7 +196,7 @@ async function fetchAdzunaJobs({
     params.set("where", preferredLocationList[0]);
   }
 
-  const url = `${ADZUNA_BASE_URL}/jobs/${country}/search/1?${params.toString()}`;
+  const url = `${ADZUNA_BASE_URL}/jobs/${selectedCountry}/search/1?${params.toString()}`;
 
   const response = await fetch(url, {
     method: "GET",
@@ -227,15 +208,106 @@ async function fetchAdzunaJobs({
   const data = await response.json();
 
   if (!response.ok) {
-    throw new Error(
-      data?.message || data?.error || "Failed to fetch jobs from Adzuna."
-    );
+    throw new Error(data?.message || data?.error || "Failed to fetch jobs from Adzuna.");
   }
 
   return Array.isArray(data.results) ? data.results : [];
 }
 
-async function searchAndScoreJobs(payload) {
+async function upsertScoredJobs({
+  jobs,
+  search,
+  resumeText,
+  preferredRoles,
+  preferredLocations,
+  minimumScore,
+  country,
+}) {
+  const resumeSkills = extractSkillsFromResume(resumeText);
+  const savedJobs = [];
+
+  for (const job of jobs) {
+    const scoring = computeJobScore({
+      job,
+      resumeSkills,
+      preferredRoles,
+      preferredLocations,
+      searchQuery: search,
+    });
+
+    if (scoring.score < Number(minimumScore || 0)) {
+      continue;
+    }
+
+    const payload = {
+      externalJobId: String(job.id || ""),
+      source: "adzuna",
+      title: job.title || "Untitled Role",
+      company: job.company?.display_name || "Unknown Company",
+      location: job.location?.display_name || "Unknown Location",
+      country: (country || "in").toLowerCase(),
+      url: job.redirect_url || "",
+      description: job.description || "",
+      snippet: job.description || "",
+      category: job.category?.label || "",
+      created: job.created || "",
+      salaryMin: job.salary_min ?? null,
+      salaryMax: job.salary_max ?? null,
+      matchScore: scoring.score,
+      matchingSkills: scoring.matchingSkills,
+      missingSkills: scoring.missingSkills,
+      searchQuery: search || "",
+      preferredRoles: preferredRoles || "",
+      preferredLocations: preferredLocations || "",
+      fetchedAt: new Date(),
+    };
+
+    if (!payload.url) {
+      continue;
+    }
+
+    const existingJob =
+      (payload.externalJobId &&
+        (await Job.findOne({
+          externalJobId: payload.externalJobId,
+          source: "adzuna",
+        }))) ||
+      (await Job.findOne({
+        url: payload.url,
+        source: "adzuna",
+      }));
+
+    if (existingJob) {
+      existingJob.title = payload.title;
+      existingJob.company = payload.company;
+      existingJob.location = payload.location;
+      existingJob.country = payload.country;
+      existingJob.description = payload.description;
+      existingJob.snippet = payload.snippet;
+      existingJob.category = payload.category;
+      existingJob.created = payload.created;
+      existingJob.salaryMin = payload.salaryMin;
+      existingJob.salaryMax = payload.salaryMax;
+      existingJob.matchScore = payload.matchScore;
+      existingJob.matchingSkills = payload.matchingSkills;
+      existingJob.missingSkills = payload.missingSkills;
+      existingJob.searchQuery = payload.searchQuery;
+      existingJob.preferredRoles = payload.preferredRoles;
+      existingJob.preferredLocations = payload.preferredLocations;
+      existingJob.fetchedAt = new Date();
+
+      const updatedJob = await existingJob.save();
+      savedJobs.push(updatedJob);
+    } else {
+      const newJob = await Job.create(payload);
+      savedJobs.push(newJob);
+    }
+  }
+
+  return savedJobs.sort((a, b) => b.matchScore - a.matchScore);
+}
+
+async function searchScoreAndStoreJobs(payload) {
   const {
     search,
     limit,
@@ -244,39 +316,62 @@ async function searchAndScoreJobs(payload) {
     preferredLocations,
     minimumScore,
     remoteOnly,
+    country,
   } = payload;
 
-  const resumeSkills = extractSkillsFromResume(resumeText);
-  const jobs = await fetchAdzunaJobs({
+  const fetchedJobs = await fetchAdzunaJobs({
     search,
     limit,
     preferredLocations,
     remoteOnly,
+    country,
   });
 
-  const scoredJobs = jobs
-    .map((job) => {
-      const scoring = computeJobScore({
-        job,
-        resumeSkills,
-        preferredRoles,
-        preferredLocations,
-        minimumScore,
-        searchQuery: search,
-      });
-
-      return mapAdzunaJob(job, scoring);
-    })
-    .filter((job) => job.matchScore >= Number(minimumScore || 0))
-    .sort((a, b) => b.matchScore - a.matchScore);
+  const savedJobs = await upsertScoredJobs({
+    jobs: fetchedJobs,
+    search,
+    resumeText,
+    preferredRoles,
+    preferredLocations,
+    minimumScore,
+    country,
+  });
 
   return {
-    totalFetched: jobs.length,
-    totalReturned: scoredJobs.length,
-    jobs: scoredJobs,
+    totalFetched: fetchedJobs.length,
+    totalReturned: savedJobs.length,
+    jobs: savedJobs,
   };
 }
 
+async function listStoredJobs({
+  country,
+  status,
+  minimumScore,
+  limit = 50,
+}) {
+  const query = {};
+
+  if (country) {
+    query.country = String(country).toLowerCase();
+  }
+
+  if (status) {
+    query.status = status;
+  }
+
+  if (minimumScore !== undefined && minimumScore !== null && minimumScore !== "") {
+    query.matchScore = { $gte: Number(minimumScore) || 0 };
+  }
+
+  const jobs = await Job.find(query)
+    .sort({ fetchedAt: -1, matchScore: -1 })
+    .limit(Number(limit) || 50);
+
+  return jobs;
+}
+
 module.exports = {
-  searchAndScoreJobs,
+  searchScoreAndStoreJobs,
+  listStoredJobs,
 };
