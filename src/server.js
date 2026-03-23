@@ -11,6 +11,7 @@ import resumeRoutes from "./routes/resumeRoutes.js";
 import coverLetterRoutes from "./routes/coverLetterRoutes.js";
 import screenshotRoutes from "./routes/screenshotRoutes.js";
 import usageRoutes from "./routes/usageRoutes.js";
+import stripeWebhookRoutes from "./routes/stripeWebhookRoutes.js";
 
 const app = express();
 
@@ -21,6 +22,14 @@ app.use(
     origin: true,
     credentials: true,
   })
+);
+
+// Stripe webhook route must come BEFORE express.json()
+// and must use raw body
+app.use(
+  "/api/stripe/webhook",
+  express.raw({ type: "application/json" }),
+  stripeWebhookRoutes
 );
 
 app.use(express.json({ limit: "10mb" }));

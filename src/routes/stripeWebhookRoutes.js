@@ -4,12 +4,17 @@ import User from "../models/User.js";
 
 const router = express.Router();
 
-const stripeSecretKey = process.env.STRIPE_SECRET_KEY || "";
-const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET || "";
+function getStripeInstance() {
+  const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
 
-const stripe = stripeSecretKey ? new Stripe(stripeSecretKey) : null;
+  if (!stripeSecretKey) {
+    throw new Error("STRIPE_SECRET_KEY is missing in environment variables.");
+  }
 
-const normalizePlanFromPriceOrMetadata = ({ planType, priceId }) => {
+  return new Stripe(stripeSecretKey);
+}
+
+function normalizePlanFromPriceOrMetadata({ planType = "", priceId = "" }) {
   const proPriceId = process.env.STRIPE_PRO_PRICE_ID || "";
   const autoPriceId = process.env.STRIPE_AUTO_PRICE_ID || "";
 
@@ -20,9 +25,9 @@ const normalizePlanFromPriceOrMetadata = ({ planType, priceId }) => {
   if (priceId && proPriceId && priceId === proPriceId) return "pro";
 
   return "free";
-};
+}
 
-const updateUserPlan = async ({
+async function updateUserPlan({
   userId = "",
   customerEmail = "",
   subscriptionId = "",
@@ -30,7 +35,7 @@ const updateUserPlan = async ({
   priceId = "",
   subscriptionStatus = "",
   planType = "",
-}) => {
+}) {
   try {
     const normalizedPlan = normalizePlanFromPriceOrMetadata({
       planType,
@@ -58,7 +63,7 @@ const updateUserPlan = async ({
           stripeCustomerId: customerId || "",
           stripeSubscriptionId: subscriptionId || "",
           stripePriceId: priceId || "",
-          subscriptionStatus: subscriptionStatus || "",
+          subscriptionStatus: subscriptionStatus || "active",
         },
       },
       { new: true }
@@ -75,9 +80,9 @@ const updateUserPlan = async ({
   } catch (error) {
     console.error("updateUserPlan error:", error.message);
   }
-};
+}
 
-const downgradeUserBySubscriptionId = async (subscriptionId = "") => {
+async function downgradeUserBySubscriptionId(subscriptionId = "") {
   try {
     if (!subscriptionId) return;
 
@@ -98,16 +103,11 @@ const downgradeUserBySubscriptionId = async (subscriptionId = "") => {
   } catch (error) {
     console.error("downgradeUserBySubscriptionId error:", error.message);
   }
-};
+}
 
-router.post("/", express.raw({ type: "application/json" }), async (req, res) => {
+router.post("/", async (req, res) => {
   try {
-    if (!stripe) {
-      return res.status(500).json({
-        success: false,
-        message: "Stripe is not configured.",
-      });
-    }
+    const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET || "";
 
     if (!stripeWebhookSecret) {
       return res.status(500).json({
@@ -121,6 +121,8 @@ router.post("/", express.raw({ type: "application/json" }), async (req, res) => 
     if (!signature) {
       return res.status(400).send("Missing stripe-signature header");
     }
+
+    const stripe = getStripeInstance();
 
     let event;
 
@@ -137,11 +139,11 @@ router.post("/", express.raw({ type: "application/json" }), async (req, res) => 
 
     switch (event.type) {
       case "checkout.session.completed": {
-console.log("Webhook session:", session);
         const session = event.data.object;
+        console.log("Webhook session:", session);
 
         const userId = session.metadata?.userId || "";
-        const planType = session.metadata?.planType || "";
+        const planType = session.metadata?.plan || "";
         const customerEmail =
           session.customer_details?.email || session.customer_email || "";
         const customerId =
@@ -155,6 +157,7 @@ console.log("Webhook session:", session);
           const subscription = await stripe.subscriptions.retrieve(
             subscriptionId
           );
+
           priceId = subscription.items?.data?.[0]?.price?.id || "";
 
           await updateUserPlan({
@@ -163,7 +166,7 @@ console.log("Webhook session:", session);
             subscriptionId,
             customerId,
             priceId,
-            subscriptionStatus: subscription.status || "",
+            subscriptionStatus: subscription.status || "active",
             planType,
           });
         } else {
@@ -186,7 +189,7 @@ console.log("Webhook session:", session);
         const subscription = event.data.object;
 
         const userId = subscription.metadata?.userId || "";
-        const planType = subscription.metadata?.planType || "";
+        const planType = subscription.metadata?.plan || "";
         const customerId =
           typeof subscription.customer === "string" ? subscription.customer : "";
         const subscriptionId = subscription.id || "";
