@@ -1,56 +1,85 @@
-const express = require("express");
-const Stripe = require("stripe");
+import express from "express";
+import Stripe from "stripe";
+import { protect } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+function getStripeInstance() {
+  const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
 
-function normalizeEmail(email = "") {
-  return String(email).trim().toLowerCase();
+  if (!stripeSecretKey) {
+    throw new Error("STRIPE_SECRET_KEY is missing in environment variables.");
+  }
+
+  return new Stripe(stripeSecretKey);
 }
 
-function isProStatus(status) {
-  return ["active", "trialing"].includes(status);
+function getPriceIdFromPlan(plan) {
+  if (plan === "pro") {
+    return process.env.STRIPE_PRO_PRICE_ID;
+  }
+
+  if (plan === "auto") {
+    return process.env.STRIPE_AUTO_PRICE_ID;
+  }
+
+  return null;
 }
 
-router.get("/ping", (req, res) => {
-  return res.json({
-    success: true,
-    message: "billing route working",
-  });
-});
-
-router.post("/create-checkout-session", async (req, res) => {
+router.post("/create-checkout-session", protect, async (req, res) => {
   try {
-    const email = normalizeEmail(req.body.email);
+    const stripe = getStripeInstance();
+    const { plan } = req.body;
 
-    if (!email) {
+    if (!plan) {
       return res.status(400).json({
         success: false,
-        message: "Email is required.",
+        message: "Plan is required.",
+      });
+    }
+
+    const priceId = getPriceIdFromPlan(plan);
+
+    if (!priceId) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid plan selected.",
+      });
+    }
+
+    if (!process.env.CLIENT_URL) {
+      return res.status(500).json({
+        success: false,
+        message: "CLIENT_URL is missing in environment variables.",
       });
     }
 
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
-      customer_email: email,
+      payment_method_types: ["card"],
       line_items: [
         {
-          price: process.env.STRIPE_PRICE_ID,
+          price: priceId,
           quantity: 1,
         },
       ],
-      allow_promotion_codes: true,
-      success_url: `${process.env.FRONTEND_URL}?checkout=success&email=${encodeURIComponent(email)}`,
-      cancel_url: `${process.env.FRONTEND_URL}?checkout=cancel`,
+      customer_email: req.user.email,
+      client_reference_id: String(req.user._id),
+      metadata: {
+        userId: String(req.user._id),
+        email: req.user.email,
+        plan,
+      },
+      success_url: `${process.env.CLIENT_URL}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.CLIENT_URL}/billing/cancel`,
     });
 
-    return res.json({
+    return res.status(200).json({
       success: true,
       url: session.url,
     });
   } catch (error) {
-    console.error("Stripe checkout session error:", error.message);
+    console.error("Stripe checkout session error:", error);
 
     return res.status(500).json({
       success: false,
@@ -60,103 +89,55 @@ router.post("/create-checkout-session", async (req, res) => {
   }
 });
 
-router.post("/create-portal-session", async (req, res) => {
+router.get("/stripe-config-check", async (req, res) => {
   try {
-    const email = normalizeEmail(req.body.email);
+    const stripeKey = process.env.STRIPE_SECRET_KEY || "";
+    const proPriceId = process.env.STRIPE_PRO_PRICE_ID;
+    const autoPriceId = process.env.STRIPE_AUTO_PRICE_ID;
 
-    if (!email) {
-      return res.status(400).json({
+    if (!stripeKey || !proPriceId || !autoPriceId) {
+      return res.status(500).json({
         success: false,
-        message: "Email is required.",
+        message: "Missing Stripe environment variables.",
       });
     }
 
-    const customers = await stripe.customers.list({
-      email,
-      limit: 1,
-    });
+    const stripe = getStripeInstance();
 
-    const customer = customers.data[0];
+    const proPrice = await stripe.prices.retrieve(proPriceId);
+    const autoPrice = await stripe.prices.retrieve(autoPriceId);
 
-    if (!customer) {
-      return res.status(404).json({
-        success: false,
-        message: "No Stripe customer found for this email.",
-      });
-    }
-
-    const portalSession = await stripe.billingPortal.sessions.create({
-      customer: customer.id,
-      return_url: process.env.FRONTEND_URL,
-    });
-
-    return res.json({
+    return res.status(200).json({
       success: true,
-      url: portalSession.url,
+      keyMode: stripeKey.startsWith("sk_live_") ? "live" : "test",
+      pro: {
+        id: proPrice.id,
+        active: proPrice.active,
+        livemode: proPrice.livemode,
+        type: proPrice.type,
+        recurring: proPrice.recurring ? proPrice.recurring.interval : null,
+        unit_amount: proPrice.unit_amount,
+        currency: proPrice.currency,
+      },
+      auto: {
+        id: autoPrice.id,
+        active: autoPrice.active,
+        livemode: autoPrice.livemode,
+        type: autoPrice.type,
+        recurring: autoPrice.recurring ? autoPrice.recurring.interval : null,
+        unit_amount: autoPrice.unit_amount,
+        currency: autoPrice.currency,
+      },
     });
   } catch (error) {
-    console.error("Stripe portal session error:", error.message);
+    console.error("Stripe config check error:", error);
 
     return res.status(500).json({
       success: false,
-      message: "Failed to create portal session.",
+      message: "Stripe config check failed.",
       error: error.message,
     });
   }
 });
 
-router.get("/status", async (req, res) => {
-  try {
-    const email = normalizeEmail(req.query.email);
-
-    if (!email) {
-      return res.status(400).json({
-        success: false,
-        message: "Email is required.",
-      });
-    }
-
-    const customers = await stripe.customers.list({
-      email,
-      limit: 1,
-    });
-
-    const customer = customers.data[0];
-
-    if (!customer) {
-      return res.json({
-        success: true,
-        email,
-        isPro: false,
-        subscriptionStatus: "none",
-      });
-    }
-
-    const subscriptions = await stripe.subscriptions.list({
-      customer: customer.id,
-      limit: 10,
-    });
-
-    const activeSubscription = subscriptions.data.find((sub) =>
-      isProStatus(sub.status)
-    );
-
-    return res.json({
-      success: true,
-      email,
-      isPro: !!activeSubscription,
-      subscriptionStatus: activeSubscription ? activeSubscription.status : "none",
-      customerId: customer.id,
-    });
-  } catch (error) {
-    console.error("Stripe status error:", error.message);
-
-    return res.status(500).json({
-      success: false,
-      message: "Failed to fetch billing status.",
-      error: error.message,
-    });
-  }
-});
-
-module.exports = router;
+export default router;

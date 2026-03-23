@@ -1,100 +1,63 @@
-const express = require("express");
-const cors = require("cors");
-const mongoose = require("mongoose");
-const dotenv = require("dotenv");
-
+import dotenv from "dotenv";
 dotenv.config();
 
+import express from "express";
+import cors from "cors";
+import connectDB from "./config/db.js";
+
+import authRoutes from "./routes/authRoutes.js";
+import billingRoutes from "./routes/billingRoutes.js";
+import resumeRoutes from "./routes/resumeRoutes.js";
+import coverLetterRoutes from "./routes/coverLetterRoutes.js";
+import screenshotRoutes from "./routes/screenshotRoutes.js";
+import usageRoutes from "./routes/usageRoutes.js";
+
 const app = express();
-const PORT = process.env.PORT || 8000;
 
-function normalizeRouter(mod) {
-  if (!mod) return null;
-  if (typeof mod === "function") return mod;
-  if (typeof mod.default === "function") return mod.default;
-  if (typeof mod.router === "function") return mod.router;
-  if (typeof mod.routes === "function") return mod.routes;
-  if (typeof mod.jobsRoutes === "function") return mod.jobsRoutes;
-  if (typeof mod.indiaAutoHuntRoutes === "function") return mod.indiaAutoHuntRoutes;
-  if (typeof mod.screenshotRoutes === "function") return mod.screenshotRoutes;
-  if (typeof mod.resumeRoutes === "function") return mod.resumeRoutes;
-  return null;
-}
+connectDB();
 
-function loadRoute(modulePath, label) {
-  try {
-    const mod = require(modulePath);
-    const router = normalizeRouter(mod);
-
-    if (!router) {
-      console.error(`❌ ${label} did not export a valid Express router.`);
-      console.error(`   Module path: ${modulePath}`);
-      console.error(`   Export keys:`, mod && typeof mod === "object" ? Object.keys(mod) : typeof mod);
-      return express.Router();
-    }
-
-    console.log(`✅ Loaded ${label}`);
-    return router;
-  } catch (error) {
-    console.error(`❌ Failed to load ${label}`);
-    console.error(`   Module path: ${modulePath}`);
-    console.error(`   Error: ${error.message}`);
-    return express.Router();
-  }
-}
-
-const screenshotRoutes = loadRoute("./routes/screenshotRoutes", "screenshotRoutes");
-const resumeRoutes = loadRoute("./routes/resumeRoutes", "resumeRoutes");
-const jobsRoutes = loadRoute("./routes/jobsRoutes", "jobsRoutes");
-const indiaAutoHuntRoutes = loadRoute("./routes/indiaAutoHuntRoutes", "indiaAutoHuntRoutes");
-
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-mongoose
-  .connect(process.env.MONGODB_URI)
-  .then(() => {
-    console.log("MongoDB connected");
+app.use(
+  cors({
+    origin: true,
+    credentials: true,
   })
-  .catch((error) => {
-    console.error("MongoDB connection error:", error.message);
-  });
+);
+
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true }));
 
 app.get("/api/test", (req, res) => {
   res.json({
     success: true,
     message: "API test route working",
-    build: "render-sync-final-v1",
   });
 });
 
-app.get("/api/build-info", (req, res) => {
-  res.json({
-    success: true,
-    build: "render-sync-final-v1",
-    routes: [
-      "/api/test",
-      "/api/build-info",
-      "/api/screenshots",
-      "/api/resume-tailor",
-      "/api/jobs/search",
-      "/api/jobs/profile",
-      "/api/jobs/stored",
-      "/api/india-auto-hunt/deploy-check",
-      "/api/india-auto-hunt/jobs",
-      "/api/india-auto-hunt/shortlisted",
-      "/api/india-auto-hunt/applied",
-      "/api/india-auto-hunt/apply-all",
-      "/api/india-auto-hunt/job-action"
-    ],
-  });
-});
-
-app.use("/api/screenshots", screenshotRoutes);
+app.use("/api/auth", authRoutes);
+app.use("/api/billing", billingRoutes);
 app.use("/api/resume-tailor", resumeRoutes);
-app.use("/api/jobs", jobsRoutes);
-app.use("/api/india-auto-hunt", indiaAutoHuntRoutes);
+app.use("/api/cover-letter", coverLetterRoutes);
+app.use("/api/screenshots", screenshotRoutes);
+app.use("/api/usage", usageRoutes);
+
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    message: "Route not found.",
+  });
+});
+
+app.use((error, req, res, next) => {
+  console.error("Server error:", error);
+
+  res.status(500).json({
+    success: false,
+    message: "Internal server error.",
+    error: error.message,
+  });
+});
+
+const PORT = process.env.PORT || 8000;
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

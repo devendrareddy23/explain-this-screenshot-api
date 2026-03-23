@@ -1,135 +1,133 @@
-const mongoose = require("mongoose");
+import mongoose from "mongoose";
 
 const jobSchema = new mongoose.Schema(
   {
     jobId: {
       type: String,
-      trim: true,
-      default: undefined,
-    },
-    profileEmail: {
-      type: String,
-      trim: true,
-      default: undefined,
-    },
-    source: {
-      type: String,
       default: "",
-    },
-    externalId: {
-      type: String,
-      default: "",
-    },
-    searchQuery: {
-      type: String,
-      default: "",
+      index: true,
     },
     title: {
       type: String,
       default: "",
+      trim: true,
     },
     company: {
       type: String,
       default: "",
+      trim: true,
     },
     location: {
       type: String,
       default: "",
+      trim: true,
     },
-    category: {
+    country: {
       type: String,
       default: "",
+      trim: true,
     },
-    type: {
+    source: {
       type: String,
       default: "",
+      trim: true,
     },
-    salary: {
+    sourceUrl: {
       type: String,
       default: "",
+      trim: true,
     },
-    publicationDate: {
+    applyUrl: {
       type: String,
       default: "",
-    },
-    descriptionSnippet: {
-      type: String,
-      default: "",
-    },
-    tags: {
-      type: [String],
-      default: [],
+      trim: true,
     },
     description: {
       type: String,
       default: "",
     },
-    country: {
-      type: String,
-      default: "global",
+    salaryMin: {
+      type: Number,
+      default: null,
     },
-    jobUrl: {
-      type: String,
-      default: "",
+    salaryMax: {
+      type: Number,
+      default: null,
     },
-    url: {
-      type: String,
-      default: "",
-    },
-    redirectUrl: {
+    salaryCurrency: {
       type: String,
       default: "",
+      trim: true,
     },
+    employmentType: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    remote: {
+      type: Boolean,
+      default: false,
+    },
+
+    profileEmail: {
+      type: String,
+      default: "",
+      trim: true,
+      lowercase: true,
+      index: true,
+    },
+
     score: {
       type: Number,
       default: 0,
     },
-    matchScore: {
-      type: Number,
-      default: 0,
-    },
-    matchReasons: {
+    reasons: {
       type: [String],
       default: [],
     },
-    status: {
-      type: String,
-      default: "new",
+
+    shortlisted: {
+      type: Boolean,
+      default: false,
     },
     applied: {
       type: Boolean,
       default: false,
     },
-    coverNote: {
+    skipped: {
+      type: Boolean,
+      default: false,
+    },
+
+    appliedAt: {
+      type: Date,
+      default: null,
+    },
+    skippedAt: {
+      type: Date,
+      default: null,
+    },
+
+    notes: {
       type: String,
       default: "",
     },
-    tailoredResume: {
-      type: String,
-      default: "",
-    },
-    rawJob: {
+
+    rawJobData: {
       type: mongoose.Schema.Types.Mixed,
-      default: {},
+      default: null,
     },
   },
-  {
-    timestamps: true,
-  }
+  { timestamps: true }
 );
 
-jobSchema.index({ url: 1 }, { unique: true, sparse: true });
+jobSchema.index({ profileEmail: 1, jobId: 1 }, { unique: false });
+jobSchema.index({ profileEmail: 1, shortlisted: 1 });
+jobSchema.index({ profileEmail: 1, applied: 1 });
+jobSchema.index({ profileEmail: 1, skipped: 1 });
+jobSchema.index({ profileEmail: 1, createdAt: -1 });
 
-jobSchema.index(
-  { jobId: 1, profileEmail: 1 },
-  {
-    unique: true,
-    partialFilterExpression: {
-      jobId: { $gt: "" },
-      profileEmail: { $gt: "" },
-    },
-  }
-);
+const Job = mongoose.models.Job || mongoose.model("Job", jobSchema);
 
-module.exports =
-  mongoose.models.Job || mongoose.model("Job", jobSchema);
+export { Job };
+export default Job;
