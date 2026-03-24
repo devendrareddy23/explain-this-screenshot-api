@@ -1,19 +1,14 @@
-import { checkAndUpdateUsage } from "../utils/usage.js";
+import OpenAI from "openai";
+
+const getOpenAIClient = () => {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return null;
+  return new OpenAI({ apiKey });
+};
 
 export const generateCoverLetter = async (req, res) => {
   try {
-    const userId = req.user._id;
-
-    const usage = await checkAndUpdateUsage(userId, "coverLetter");
-
-    if (!usage.allowed) {
-      return res.status(403).json({
-        success: false,
-        message: "Daily cover letter limit reached. Upgrade to Pro.",
-      });
-    }
-
-    const { resumeText, jobDescription } = req.body;
+    const { resumeText, jobDescription, companyName, roleTitle } = req.body || {};
 
     if (!resumeText || !jobDescription) {
       return res.status(400).json({
@@ -22,33 +17,74 @@ export const generateCoverLetter = async (req, res) => {
       });
     }
 
-    const result = `
-Dear Hiring Team,
+    const client = getOpenAIClient();
 
-I am excited to apply for this opportunity. My background includes hands-on experience with Node.js, Express.js, MongoDB, REST APIs, authentication, deployment, and production debugging.
+    if (!client) {
+      return res.status(500).json({
+        success: false,
+        message: "OpenAI API key missing.",
+      });
+    }
 
-My experience aligns well with the role because I have built backend systems, worked on API development, deployed applications to cloud environments, and improved real-world developer tools. I focus on building practical, scalable solutions with clean structure and reliable behavior.
+    const response = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      temperature: 0.4,
+      messages: [
+        {
+          role: "system",
+          content: `
+You are an expert job application writer.
 
-In recent projects, I developed and deployed backend applications with authentication, resume tailoring workflows, cover letter generation, and usage-based SaaS logic. I also worked on production-style deployment using AWS EC2, Nginx, PM2, and cloud-based hosting.
+STRICT RULES:
+- Do NOT assume any specific technology (Node.js, Java, etc.) unless provided
+- Use ONLY the resumeText and jobDescription provided
+- Do NOT reuse previous user's data
+- Do NOT inject default profiles
+- Keep it realistic and tailored
 
-I would welcome the opportunity to contribute my backend development skills, problem-solving ability, and product mindset to your team.
+STRUCTURE:
+- Short intro (role + interest)
+- Why candidate is strong fit
+- Skills aligned with job description
+- 1–2 relevant achievements
+- Confident closing
 
-Thank you for your time and consideration.
+No markdown. Plain clean text.
+          `,
+        },
+        {
+          role: "user",
+          content: `
+RESUME:
+${resumeText}
 
-Sincerely,
-${req.user.name}
-    `.trim();
+JOB DESCRIPTION:
+${jobDescription}
 
-    return res.status(200).json({
+COMPANY:
+${companyName || "Not specified"}
+
+ROLE:
+${roleTitle || "Not specified"}
+          `,
+        },
+      ],
+    });
+
+    const coverLetter =
+      response.choices?.[0]?.message?.content || "No cover letter generated.";
+
+    return res.json({
       success: true,
-      result,
-      usage,
+      coverLetter,
     });
   } catch (error) {
     console.error("Cover letter error:", error);
+
     return res.status(500).json({
       success: false,
       message: "Failed to generate cover letter.",
+      error: error.message,
     });
   }
 };
