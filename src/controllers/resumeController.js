@@ -1,34 +1,37 @@
-const { generateTailoredResume } = require("../services/resumeService");
+import { generateTailoredResume } from "../services/resumeService.js";
 
-const tailorResume = async (req, res) => {
+export const tailorResume = async (req, res) => {
   try {
     const { resumeText, jobDescription } = req.body || {};
 
-    if (!resumeText || !jobDescription) {
+    const safeResumeText = (resumeText || "").trim();
+    const safeJobDescription = (jobDescription || "").trim();
+
+    if (!safeResumeText || !safeJobDescription) {
       return res.status(400).json({
         success: false,
-        message: "resumeText and jobDescription are required."
+        message: "resumeText and jobDescription are required.",
       });
     }
 
     const result = await generateTailoredResume({
-      resumeText,
-      jobDescription,
+      resumeText: safeResumeText,
+      jobDescription: safeJobDescription,
     });
 
-    return res.json({
+    return res.status(200).json({
       success: true,
+      message: "Resume tailored successfully.",
       result,
+      tailoredResume: result,
     });
   } catch (error) {
+    console.error("Resume tailor error:", error);
+
     return res.status(500).json({
       success: false,
       message: "Failed to tailor resume.",
       error: error.message,
     });
   }
-};
-
-module.exports = {
-  tailorResume,
 };
