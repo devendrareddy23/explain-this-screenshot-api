@@ -1,6 +1,7 @@
 import express from "express";
 import Job from "../models/Job.js";
-import { protect } from "../middleware/protect.js";
+import { protect } from "../middleware/authMiddleware.js";
+import { searchScoreAndStoreJobs } from "../services/jobSearchService.js";
 
 const router = express.Router();
 
@@ -8,58 +9,65 @@ router.post("/search", protect, async (req, res) => {
   try {
     const {
       search = "",
+      location = "",
+      jobType = "",
       limit = 20,
+      minimumScore = 0,
       country = "",
       source = "",
-      remoteOnly = false,
-      minimumScore = 0,
-    } = req.body;
+      remoteOnly = false
+    } = req.body || {};
 
-    const query = {
-      profileEmail: (req.userEmail || "").toLowerCase(),
-    };
+    const safeSearch = String(search || "").trim();
+    const safeLocation = String(location || "").trim();
+    const safeJobType = String(jobType || "").trim().toLowerCase();
+    const safeCountry = String(country || "").trim().toLowerCase();
+    const safeSource = String(source || "").trim();
 
-    if (country) {
-      query.country = country;
+    const finalRemoteOnly =
+      remoteOnly === true ||
+      remoteOnly === "true" ||
+      safeJobType === "remote";
+
+    if (!safeSearch) {
+      return res.status(400).json({
+        success: false,
+        message: "search (role/field) is required."
+      });
     }
 
-    if (source) {
-      query.source = source;
-    }
+    const userEmail =
+      String(req.userEmail || req.user?.email || req.body.profileEmail || "")
+        .trim()
+        .toLowerCase();
 
-    if (remoteOnly) {
-      query.remote = true;
-    }
-
-    if (minimumScore) {
-      query.score = { $gte: Number(minimumScore) || 0 };
-    }
-
-    if (search && String(search).trim()) {
-      const safeSearch = String(search).trim();
-      query.$or = [
-        { title: { $regex: safeSearch, $options: "i" } },
-        { company: { $regex: safeSearch, $options: "i" } },
-        { location: { $regex: safeSearch, $options: "i" } },
-        { description: { $regex: safeSearch, $options: "i" } },
-      ];
-    }
-
-    const jobs = await Job.find(query)
-      .sort({ createdAt: -1 })
-      .limit(Number(limit) || 20);
+    const result = await searchScoreAndStoreJobs({
+      search: safeSearch,
+      limit: Number(limit) || 20,
+      minimumScore: Number(minimumScore) || 0,
+      remoteOnly: finalRemoteOnly,
+      country: safeCountry || "in",
+      source: safeSource,
+      profileEmail: userEmail,
+      jobType: safeJobType,
+      location: safeLocation
+    });
 
     return res.status(200).json({
       success: true,
-      total: jobs.length,
-      jobs,
+      totalFetched: result.totalFetched,
+      totalMatched: result.totalMatched,
+      jobs: result.jobs,
+      shortlistedJobs: result.shortlistedJobs,
+      warning: result.warning,
+      usedProfileEmail: userEmail
     });
   } catch (error) {
     console.error("POST /api/jobs/search error:", error);
     return res.status(500).json({
       success: false,
       message: "Failed to search jobs.",
-      error: error.message,
+      error: error.message
     });
   }
 });
@@ -69,7 +77,7 @@ router.get("/stored", protect, async (req, res) => {
     const { country = "", source = "", shortlisted, applied, skipped } = req.query;
 
     const query = {
-      profileEmail: (req.userEmail || "").toLowerCase(),
+      profileEmail: String(req.userEmail || req.user?.email || "").toLowerCase()
     };
 
     if (country) query.country = country;
@@ -89,14 +97,14 @@ router.get("/stored", protect, async (req, res) => {
     return res.status(200).json({
       success: true,
       total: jobs.length,
-      jobs,
+      jobs
     });
   } catch (error) {
     console.error("GET /api/jobs/stored error:", error);
     return res.status(500).json({
       success: false,
       message: "Failed to fetch stored jobs.",
-      error: error.message,
+      error: error.message
     });
   }
 });
@@ -108,14 +116,14 @@ router.patch("/:jobId/apply", protect, async (req, res) => {
     const job = await Job.findOneAndUpdate(
       {
         _id: jobId,
-        profileEmail: (req.userEmail || "").toLowerCase(),
+        profileEmail: String(req.userEmail || req.user?.email || "").toLowerCase()
       },
       {
         $set: {
           applied: true,
           skipped: false,
-          appliedAt: new Date(),
-        },
+          appliedAt: new Date()
+        }
       },
       { new: true }
     );
@@ -123,21 +131,21 @@ router.patch("/:jobId/apply", protect, async (req, res) => {
     if (!job) {
       return res.status(404).json({
         success: false,
-        message: "Job not found.",
+        message: "Job not found."
       });
     }
 
     return res.status(200).json({
       success: true,
       message: "Job marked as applied.",
-      job,
+      job
     });
   } catch (error) {
     console.error("PATCH /api/jobs/:jobId/apply error:", error);
     return res.status(500).json({
       success: false,
       message: "Failed to mark job as applied.",
-      error: error.message,
+      error: error.message
     });
   }
 });
@@ -149,12 +157,12 @@ router.patch("/:jobId/skip", protect, async (req, res) => {
     const job = await Job.findOneAndUpdate(
       {
         _id: jobId,
-        profileEmail: (req.userEmail || "").toLowerCase(),
+        profileEmail: String(req.userEmail || req.user?.email || "").toLowerCase()
       },
       {
         $set: {
-          skipped: true,
-        },
+          skipped: true
+        }
       },
       { new: true }
     );
@@ -162,21 +170,21 @@ router.patch("/:jobId/skip", protect, async (req, res) => {
     if (!job) {
       return res.status(404).json({
         success: false,
-        message: "Job not found.",
+        message: "Job not found."
       });
     }
 
     return res.status(200).json({
       success: true,
       message: "Job skipped.",
-      job,
+      job
     });
   } catch (error) {
     console.error("PATCH /api/jobs/:jobId/skip error:", error);
     return res.status(500).json({
       success: false,
       message: "Failed to skip job.",
-      error: error.message,
+      error: error.message
     });
   }
 });

@@ -1,222 +1,163 @@
 import axios from "axios";
 import Job from "../models/Job.js";
-import IndiaJob from "../models/IndiaJob.js";
 
-function safeText(value) {
-  return String(value || "").trim();
+const DEFAULT_COUNTRY = "in";
+const DEFAULT_RESULTS_PER_PAGE = 20;
+
+function normalizeText(value = "") {
+  return String(value).toLowerCase().trim();
 }
 
-function buildSearchWords(text) {
-  return safeText(text)
-    .toLowerCase()
-    .replace(/[^a-z0-9+.#\s/-]/g, " ")
-    .split(/\s+/)
-    .filter(Boolean);
+function includesAny(text = "", keywords = []) {
+  const normalized = normalizeText(text);
+  return keywords.some((word) => normalized.includes(normalizeText(word)));
 }
 
-function calculateMatchScore({
-  title,
-  description,
-  preferredRoles,
-  preferredLocations,
-  resumeText,
-}) {
-  const haystack = `${safeText(title)} ${safeText(description)}`.toLowerCase();
+function detectRemote(job = {}) {
+  const title = normalizeText(job.title);
+  const description = normalizeText(job.description);
+  const location = normalizeText(job.location?.display_name || "");
+
+  const combined = `${title} ${description}`;
+
+  const strongRemoteSignals = [
+    "fully remote",
+    "remote role",
+    "remote position",
+    "100% remote",
+    "work from home",
+    "wfh",
+    "anywhere in india",
+    "remote",
+    "offshore"
+  ];
+
+  const strongNonRemoteSignals = [
+    "onsite",
+    "on-site",
+    "work from office",
+    "wfo",
+    "hybrid",
+    "office location",
+    "navi mumbai",
+    "bangalore",
+    "bengaluru",
+    "chennai",
+    "hyderabad",
+    "pune",
+    "gurgaon",
+    "noida"
+  ];
+
+  const hasRemote = includesAny(combined, strongRemoteSignals);
+  const hasNonRemote = includesAny(`${combined} ${location}`, strongNonRemoteSignals);
+
+  if (hasNonRemote) return false;
+  return hasRemote;
+}
+
+function calculateScore(job = {}) {
+  const text = `${job.title || ""} ${job.description || ""}`.toLowerCase();
 
   let score = 0;
-
-  const roleWords = buildSearchWords(preferredRoles);
-  const locationWords = buildSearchWords(preferredLocations);
-  const resumeWords = buildSearchWords(resumeText).slice(0, 80);
-
-  for (const word of roleWords) {
-    if (word.length >= 3 && haystack.includes(word)) score += 8;
-  }
-
-  for (const word of locationWords) {
-    if (word.length >= 3 && haystack.includes(word)) score += 4;
-  }
-
-  for (const word of resumeWords) {
-    if (word.length >= 4 && haystack.includes(word)) score += 1;
-  }
-
-  if (haystack.includes("node")) score += 10;
-  if (haystack.includes("node.js")) score += 10;
-  if (haystack.includes("backend")) score += 8;
-  if (haystack.includes("express")) score += 6;
-  if (haystack.includes("mongodb")) score += 6;
-  if (haystack.includes("api")) score += 4;
-  if (haystack.includes("javascript")) score += 4;
-  if (haystack.includes("remote")) score += 5;
-
-  if (score > 100) score = 100;
+  if (text.includes("node")) score += 20;
+  if (text.includes("backend")) score += 15;
+  if (text.includes("api")) score += 10;
+  if (text.includes("mongodb")) score += 10;
+  if (text.includes("javascript")) score += 10;
+  if (text.includes("express")) score += 10;
+  if (text.includes("microservices")) score += 8;
+  if (text.includes("aws") || text.includes("azure") || text.includes("docker")) score += 8;
 
   return score;
 }
 
-async function fetchJobsFromAdzuna({ search, limit, country, remoteOnly }) {
-  const appId = process.env.ADZUNA_APP_ID;
-  const appKey = process.env.ADZUNA_APP_KEY;
+async function fetchAdzunaJobs(search, country = DEFAULT_COUNTRY, limit = DEFAULT_RESULTS_PER_PAGE) {
+  const adzunaAppId = process.env.ADZUNA_APP_ID;
+  const adzunaAppKey = process.env.ADZUNA_APP_KEY;
 
-  if (!appId || !appKey) {
-    return {
-      jobs: [],
-      warning: "Missing ADZUNA_APP_ID or ADZUNA_APP_KEY in environment variables.",
-    };
+  if (!adzunaAppId || !adzunaAppKey) {
+    throw new Error("Missing ADZUNA_APP_ID or ADZUNA_APP_KEY");
   }
 
-  const encodedSearch = encodeURIComponent(search);
-  const page = 1;
-  const resultsPerPage = Math.min(Number(limit) || 10, 50);
-  const normalizedCountry = safeText(country || "in").toLowerCase();
+  const url = `https://api.adzuna.com/v1/api/jobs/${country}/search/1`;
 
-  let url = `https://api.adzuna.com/v1/api/jobs/${normalizedCountry}/search/${page}?app_id=${appId}&app_key=${appKey}&results_per_page=${resultsPerPage}&what=${encodedSearch}&content-type=application/json`;
-
-  if (remoteOnly) {
-    url += `&where=${encodeURIComponent("Remote")}`;
-  }
-
-  const response = await axios.get(url, { timeout: 20000 });
-  const rawJobs = response?.data?.results || [];
-
-  const jobs = rawJobs.map((job) => ({
-    jobId: safeText(job.id),
-    title: safeText(job.title),
-    company: safeText(job.company?.display_name),
-    location: safeText(job.location?.display_name),
-    description: safeText(job.description),
-    jobUrl: safeText(job.redirect_url),
-    source: "Adzuna",
-  }));
-
-  return { jobs };
-}
-
-export const searchScoreAndStoreJobs = async ({
-  search,
-  limit = 10,
-  resumeText = "",
-  preferredRoles = "",
-  preferredLocations = "",
-  minimumScore = 0,
-  remoteOnly = false,
-  globalSearch = false,
-  country = "in",
-  profileEmail = "",
-}) => {
-  const normalizedEmail = safeText(profileEmail).toLowerCase();
-  const normalizedCountry = globalSearch ? "gb" : safeText(country || "in").toLowerCase();
-
-  const { jobs: fetchedJobs, warning } = await fetchJobsFromAdzuna({
-    search,
-    limit,
-    country: normalizedCountry,
-    remoteOnly,
+  const response = await axios.get(url, {
+    params: {
+      app_id: adzunaAppId,
+      app_key: adzunaAppKey,
+      results_per_page: limit,
+      what: search
+    },
+    timeout: 15000
   });
 
-  const scoredJobs = [];
+  return response.data?.results || [];
+}
 
-  for (const job of fetchedJobs) {
-    const matchScore = calculateMatchScore({
-      title: job.title,
-      description: job.description,
-      preferredRoles,
-      preferredLocations,
-      resumeText,
+export async function searchScoreAndStoreJobs({
+  search,
+  remoteOnly = false,
+  profileEmail = "",
+  country = DEFAULT_COUNTRY,
+  limit = DEFAULT_RESULTS_PER_PAGE
+}) {
+  try {
+    const rawJobs = await fetchAdzunaJobs(search, country, limit);
+
+    const mappedJobs = rawJobs.map((job) => {
+      const remote = detectRemote(job);
+      const score = calculateScore(job);
+
+      return {
+        jobId: String(job.id || ""),
+        title: job.title || "Untitled Role",
+        company: job.company?.display_name || "Unknown Company",
+        location: job.location?.display_name || "Unknown",
+        description: job.description || "",
+        jobUrl: job.redirect_url || "",
+        source: "Adzuna",
+        country,
+        remote,
+        matchScore: score,
+        score,
+        profileEmail
+      };
     });
 
-    const enrichedJob = {
-      ...job,
-      matchScore,
-      score: matchScore,
-      searchQuery: safeText(search),
-      country: normalizedCountry,
-      profileEmail: normalizedEmail,
-    };
+    const filteredJobs = remoteOnly
+      ? mappedJobs.filter((job) => job.remote === true)
+      : mappedJobs;
 
-    scoredJobs.push(enrichedJob);
+    const matchedJobs = filteredJobs.filter((job) => job.score >= 30);
 
-    await Job.findOneAndUpdate(
-      {
-        jobId: enrichedJob.jobId || enrichedJob.jobUrl,
-        profileEmail: normalizedEmail,
-      },
-      {
-        ...enrichedJob,
-        status: matchScore >= Number(minimumScore) ? "shortlisted" : "new",
-      },
-      {
-        upsert: true,
-        new: true,
-        setDefaultsOnInsert: true,
+    for (const job of matchedJobs) {
+      if (profileEmail) {
+        await Job.findOneAndUpdate(
+          { jobId: job.jobId, profileEmail },
+          job,
+          { upsert: true, new: true }
+        );
       }
-    );
-
-    if (normalizedEmail) {
-      await IndiaJob.findOneAndUpdate(
-        {
-          jobId: enrichedJob.jobId || enrichedJob.jobUrl,
-          profileEmail: normalizedEmail,
-        },
-        {
-          jobId: enrichedJob.jobId || enrichedJob.jobUrl,
-          title: enrichedJob.title,
-          company: enrichedJob.company,
-          location: enrichedJob.location,
-          description: enrichedJob.description,
-          jobUrl: enrichedJob.jobUrl,
-          source: enrichedJob.source,
-          profileEmail: normalizedEmail,
-          matchScore,
-          score: matchScore,
-          shortlisted: matchScore >= Number(minimumScore),
-        },
-        {
-          upsert: true,
-          new: true,
-          setDefaultsOnInsert: true,
-        }
-      );
     }
+
+    return {
+      success: true,
+      totalFetched: rawJobs.length,
+      totalMatched: matchedJobs.length,
+      jobs: matchedJobs,
+      shortlistedJobs: []
+    };
+  } catch (error) {
+    console.error("searchScoreAndStoreJobs error:", error.response?.data || error.message);
+
+    return {
+      success: true,
+      totalFetched: 0,
+      totalMatched: 0,
+      jobs: [],
+      shortlistedJobs: [],
+      warning: "Failed to fetch jobs from Adzuna"
+    };
   }
-
-  const filteredJobs = scoredJobs.filter(
-    (job) => Number(job.matchScore || 0) >= Number(minimumScore || 0)
-  );
-
-  return {
-    totalFetched: scoredJobs.length,
-    totalMatched: filteredJobs.length,
-    jobs: scoredJobs,
-    shortlistedJobs: filteredJobs,
-    warning: warning || null,
-  };
-};
-
-export const listStoredJobs = async ({
-  country,
-  status,
-  minimumScore,
-  limit,
-}) => {
-  const query = {};
-
-  if (safeText(country)) {
-    query.country = safeText(country).toLowerCase();
-  }
-
-  if (safeText(status)) {
-    query.status = safeText(status);
-  }
-
-  if (minimumScore !== undefined && minimumScore !== null && minimumScore !== "") {
-    query.matchScore = { $gte: Number(minimumScore) || 0 };
-  }
-
-  const jobs = await Job.find(query)
-    .sort({ createdAt: -1 })
-    .limit(Number(limit) || 50);
-
-  return jobs;
-};
+}
