@@ -6,8 +6,11 @@ import { searchScoreAndStoreJobs } from "../services/jobSearchService.js";
 const router = express.Router();
 
 router.post("/search", protect, async (req, res) => {
+  console.log("🔥 /api/jobs/search body:", req.body);
   try {
-    const {
+    console.log("🔥 SEARCH VALUE:", req.body?.search);
+
+  const {
       search = "",
       location = "",
       jobType = "",
@@ -15,7 +18,6 @@ router.post("/search", protect, async (req, res) => {
       minimumScore = 0,
       country = "",
       source = "",
-      remoteOnly = false,
     } = req.body || {};
 
     const safeSearch = String(search || "").trim();
@@ -24,11 +26,6 @@ router.post("/search", protect, async (req, res) => {
     const safeCountry = String(country || "").trim().toLowerCase();
     const safeSource = String(source || "").trim();
 
-    const finalRemoteOnly =
-      remoteOnly === true ||
-      remoteOnly === "true" ||
-      safeJobType === "remote";
-
     if (!safeSearch) {
       return res.status(400).json({
         success: false,
@@ -36,38 +33,29 @@ router.post("/search", protect, async (req, res) => {
       });
     }
 
-    const userEmail = String(
-      req.userEmail || req.user?.email || req.body.profileEmail || ""
-    )
-      .trim()
-      .toLowerCase();
-
     const result = await searchScoreAndStoreJobs({
       search: safeSearch,
       limit: Number(limit) || 20,
+      preferredRoles: safeSearch,
+      preferredLocations: safeLocation,
+      resumeText: "",
       minimumScore: Number(minimumScore) || 0,
-      remoteOnly: finalRemoteOnly,
+      remoteOnly: safeJobType === "remote",
+      globalSearch: !safeCountry,
       country: safeCountry || "in",
       source: safeSource,
-      profileEmail: userEmail,
+      profileEmail: (req.userEmail || "").toLowerCase(),
       jobType: safeJobType,
       location: safeLocation,
     });
 
-    if (!result.success) {
-      return res.status(500).json({
-        success: false,
-        message: result.message || "Failed to search jobs.",
-        usedProfileEmail: userEmail,
-      });
-    }
-
     return res.status(200).json({
       success: true,
       totalFetched: result.totalFetched,
-      totalFinal: result.totalFinal,
+      totalMatched: result.totalMatched,
       jobs: result.jobs,
-      usedProfileEmail: userEmail,
+      shortlistedJobs: result.shortlistedJobs,
+      warning: result.warning,
     });
   } catch (error) {
     console.error("POST /api/jobs/search error:", error);
@@ -79,123 +67,16 @@ router.post("/search", protect, async (req, res) => {
   }
 });
 
-router.post("/save", protect, async (req, res) => {
-  try {
-    const {
-      jobId = "",
-      title = "",
-      company = "",
-      location = "",
-      description = "",
-      jobUrl = "",
-      applyUrl = "",
-      source = "Adzuna",
-      sourceUrl = "",
-      country = "in",
-      remote = false,
-      employmentType = "",
-      salaryMin = null,
-      salaryMax = null,
-      salaryCurrency = "",
-      matchScore = 0,
-      score = 0,
-      reasons = [],
-      shortlisted = false,
-      rawJobData = null,
-      notes = "",
-    } = req.body || {};
-
-    const userEmail = String(req.userEmail || req.user?.email || "")
-      .trim()
-      .toLowerCase();
-
-    if (!jobId || !title) {
-      return res.status(400).json({
-        success: false,
-        message: "jobId and title are required.",
-      });
-    }
-
-    const existingJob = await Job.findOne({
-      jobId: String(jobId),
-      profileEmail: userEmail,
-    });
-
-    if (existingJob) {
-      return res.status(200).json({
-        success: false,
-        message: "Job already saved.",
-        job: existingJob,
-      });
-    }
-
-    const newJob = await Job.create({
-      jobId: String(jobId),
-      profileEmail: userEmail,
-      title: String(title),
-      company: String(company),
-      location: String(location),
-      description: String(description),
-      jobUrl: String(jobUrl),
-      applyUrl: String(applyUrl),
-      source: String(source),
-      sourceUrl: String(sourceUrl),
-      country: String(country).toLowerCase(),
-      remote: Boolean(remote),
-      employmentType: String(employmentType),
-      salaryMin: salaryMin ?? null,
-      salaryMax: salaryMax ?? null,
-      salaryCurrency: String(salaryCurrency),
-      matchScore: Number(matchScore) || 0,
-      score: Number(score) || 0,
-      reasons: Array.isArray(reasons) ? reasons : [],
-      shortlisted: Boolean(shortlisted),
-      rawJobData,
-      notes: String(notes || ""),
-    });
-
-    return res.status(201).json({
-      success: true,
-      message: "Job saved successfully.",
-      job: newJob,
-    });
-  } catch (error) {
-    if (error.code === 11000) {
-      const existingJob = await Job.findOne({
-        jobId: String(req.body.jobId),
-        profileEmail: String(req.userEmail || req.user?.email || "")
-          .trim()
-          .toLowerCase(),
-      });
-
-      return res.status(200).json({
-        success: false,
-        message: "Job already saved.",
-        job: existingJob,
-      });
-    }
-
-    console.error("POST /api/jobs/save error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to save job.",
-      error: error.message,
-    });
-  }
-});
-
 router.get("/stored", protect, async (req, res) => {
   try {
     const { country = "", source = "", shortlisted, applied, skipped } = req.query;
 
     const query = {
-      profileEmail: String(req.userEmail || req.user?.email || "")
-        .trim()
-        .toLowerCase(),
+      profileEmail: (req.userEmail || "").toLowerCase(),
     };
 
-    if (country) query.country = String(country).trim().toLowerCase();
-    if (source) query.source = String(source).trim();
+    if (country) query.country = country;
+    if (source) query.source = source;
 
     if (shortlisted === "true") query.shortlisted = true;
     if (shortlisted === "false") query.shortlisted = false;
@@ -230,9 +111,7 @@ router.patch("/:jobId/apply", protect, async (req, res) => {
     const job = await Job.findOneAndUpdate(
       {
         _id: jobId,
-        profileEmail: String(req.userEmail || req.user?.email || "")
-          .trim()
-          .toLowerCase(),
+        profileEmail: (req.userEmail || "").toLowerCase(),
       },
       {
         $set: {
@@ -273,14 +152,11 @@ router.patch("/:jobId/skip", protect, async (req, res) => {
     const job = await Job.findOneAndUpdate(
       {
         _id: jobId,
-        profileEmail: String(req.userEmail || req.user?.email || "")
-          .trim()
-          .toLowerCase(),
+        profileEmail: (req.userEmail || "").toLowerCase(),
       },
       {
         $set: {
           skipped: true,
-          skippedAt: new Date(),
         },
       },
       { new: true }
@@ -295,7 +171,7 @@ router.patch("/:jobId/skip", protect, async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "Job skipped successfully.",
+      message: "Job skipped.",
       job,
     });
   } catch (error) {
@@ -308,4 +184,5 @@ router.patch("/:jobId/skip", protect, async (req, res) => {
   }
 });
 
+export { router as jobsRoutes };
 export default router;

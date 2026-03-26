@@ -12,6 +12,7 @@ import coverLetterRoutes from "./routes/coverLetterRoutes.js";
 import screenshotRoutes from "./routes/screenshotRoutes.js";
 import usageRoutes from "./routes/usageRoutes.js";
 import stripeWebhookRoutes from "./routes/stripeWebhookRoutes.js";
+import jobsRoutes from "./routes/jobsRoutes.js";
 
 const app = express();
 
@@ -25,7 +26,6 @@ app.use(
 );
 
 // Stripe webhook route must come BEFORE express.json()
-// and must use raw body
 app.use(
   "/api/stripe/webhook",
   express.raw({ type: "application/json" }),
@@ -48,6 +48,7 @@ app.use("/api/resume-tailor", resumeRoutes);
 app.use("/api/cover-letter", coverLetterRoutes);
 app.use("/api/screenshots", screenshotRoutes);
 app.use("/api/usage", usageRoutes);
+app.use("/api/jobs", jobsRoutes);
 
 app.use((req, res) => {
   res.status(404).json({

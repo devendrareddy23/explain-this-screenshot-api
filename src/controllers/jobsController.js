@@ -1,157 +1,241 @@
-const jobService = require("../services/jobService");
+import Job from "../models/Job.js";
+import { searchJobsFromAdzuna } from "../services/jobSearchService.js";
 
-function safeRequire(path) {
+export const searchJobs = async (req, res) => {
   try {
-    return require(path);
-  } catch (error) {
-    return null;
-  }
-}
+    const {
+      search = "",
+      location = "",
+      country = "in",
+      remoteOnly = false,
+      limit = 20,
+    } = req.body;
 
-const Job = safeRequire("../models/Job");
-const MatchedJob = safeRequire("../models/MatchedJob");
-const AutoHuntJob = safeRequire("../models/AutoHuntJob");
-const AutoHuntProfile = safeRequire("../models/AutoHuntProfile");
-const SearchProfile = safeRequire("../models/SearchProfile");
+    const userEmail = req.user?.email || "";
 
-async function searchJobs(req, res) {
-  try {
-    if (typeof jobService.searchRealJobs !== "function") {
-      return res.status(500).json({
-        success: false,
-        message: "searchRealJobs function not found in jobService.js",
-        availableExports: Object.keys(jobService || {}),
-      });
-    }
+    const result = await searchJobsFromAdzuna({
+      search,
+      location,
+      country,
+      remoteOnly,
+      limit,
+      profileEmail: userEmail,
+    });
 
-    const result = await jobService.searchRealJobs(req.body || {});
-    return res.json({
+    return res.status(200).json({
       success: true,
-      source: "legacy-global-search",
-      ...result,
+      totalFetched: result?.totalFetched || 0,
+      totalMatched: result?.totalMatched || 0,
+      jobs: result?.jobs || [],
+      shortlistedJobs: result?.shortlistedJobs || [],
+      usedProfileEmail: userEmail,
     });
   } catch (error) {
+    console.error("searchJobs error:", error);
     return res.status(500).json({
       success: false,
       message: "Failed to search jobs.",
       error: error.message,
     });
   }
-}
+};
 
-async function getStoredJobs(req, res) {
+export const getStoredJobs = async (req, res) => {
   try {
-    const { profileEmail, country, limit } = req.query || {};
-    const parsedLimit = Number(limit) || 50;
+    const userEmail = req.user?.email;
 
-    const filters = {};
-    if (profileEmail) filters.profileEmail = profileEmail;
-    if (country) filters.country = country;
+    const jobs = await Job.find({ profileEmail: userEmail }).sort({
+      createdAt: -1,
+    });
 
-    if (AutoHuntJob && typeof AutoHuntJob.find === "function") {
-      const autoHuntJobs = await AutoHuntJob.find(filters)
-        .sort({ createdAt: -1 })
-        .limit(parsedLimit);
-
-      if (autoHuntJobs.length > 0) {
-        return res.json({
-          success: true,
-          source: "AutoHuntJob",
-          totalJobs: autoHuntJobs.length,
-          jobs: autoHuntJobs,
-        });
-      }
-    }
-
-    if (Job && typeof Job.find === "function") {
-      const legacyJobs = await Job.find(profileEmail ? { profileEmail } : {})
-        .sort({ createdAt: -1 })
-        .limit(parsedLimit);
-
-      return res.json({
-        success: true,
-        source: "Job",
-        totalJobs: legacyJobs.length,
-        jobs: legacyJobs,
-      });
-    }
-
-    if (MatchedJob && typeof MatchedJob.find === "function") {
-      const matchedJobs = await MatchedJob.find({})
-        .sort({ createdAt: -1 })
-        .limit(parsedLimit);
-
-      return res.json({
-        success: true,
-        source: "MatchedJob",
-        totalJobs: matchedJobs.length,
-        jobs: matchedJobs,
-      });
-    }
-
-    return res.status(500).json({
-      success: false,
-      message: "No usable job model found for stored jobs.",
-      checkedModels: ["AutoHuntJob", "Job", "MatchedJob"],
+    return res.status(200).json({
+      success: true,
+      total: jobs.length,
+      jobs,
     });
   } catch (error) {
+    console.error("getStoredJobs error:", error);
     return res.status(500).json({
       success: false,
-      message: "Failed to get stored jobs.",
+      message: "Failed to fetch stored jobs.",
       error: error.message,
     });
   }
-}
+};
 
-async function getJobsProfile(req, res) {
+export const saveJob = async (req, res) => {
   try {
-    const { profileEmail } = req.query || {};
+    const userEmail = req.user?.email;
 
-    if (!profileEmail) {
+    const {
+      jobId,
+      title = "",
+      company = "",
+      location = "",
+      description = "",
+      jobUrl = "",
+      applyUrl = "",
+      source = "",
+      sourceUrl = "",
+      country = "",
+      remote = false,
+      employmentType = "",
+      salaryMin = null,
+      salaryMax = null,
+      salaryCurrency = "",
+      score = 0,
+      matchScore = 0,
+      reasons = [],
+      shortlisted = false,
+      rawJobData = null,
+      notes = "",
+    } = req.body;
+
+    if (!jobId) {
       return res.status(400).json({
         success: false,
-        message: "profileEmail is required.",
+        message: "jobId is required.",
       });
     }
 
-    if (AutoHuntProfile && typeof AutoHuntProfile.findOne === "function") {
-      const autoProfile = await AutoHuntProfile.findOne({ profileEmail });
+    const existingJob = await Job.findOne({
+      jobId: String(jobId),
+      profileEmail: userEmail,
+    });
 
-      if (autoProfile) {
-        return res.json({
-          success: true,
-          source: "AutoHuntProfile",
-          profile: autoProfile,
-        });
-      }
-    }
-
-    if (SearchProfile && typeof SearchProfile.findOne === "function") {
-      const legacyProfile = await SearchProfile.findOne({ profileEmail });
-
-      return res.json({
-        success: true,
-        source: "SearchProfile",
-        profile: legacyProfile || null,
+    if (existingJob) {
+      return res.status(200).json({
+        success: false,
+        message: "Job already saved.",
+        job: existingJob,
       });
     }
 
-    return res.status(500).json({
-      success: false,
-      message: "No usable profile model found.",
-      checkedModels: ["AutoHuntProfile", "SearchProfile"],
+    const job = await Job.create({
+      jobId: String(jobId),
+      profileEmail: userEmail,
+      title,
+      company,
+      location,
+      description,
+      jobUrl,
+      applyUrl,
+      source,
+      sourceUrl,
+      country,
+      remote,
+      employmentType,
+      salaryMin,
+      salaryMax,
+      salaryCurrency,
+      score,
+      matchScore,
+      reasons,
+      shortlisted,
+      rawJobData,
+      notes,
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "Job saved successfully.",
+      job,
     });
   } catch (error) {
+    if (error.code === 11000) {
+      const existingJob = await Job.findOne({
+        jobId: String(req.body.jobId),
+        profileEmail: req.user?.email,
+      });
+
+      return res.status(200).json({
+        success: false,
+        message: "Job already saved.",
+        job: existingJob,
+      });
+    }
+
+    console.error("saveJob error:", error);
     return res.status(500).json({
       success: false,
-      message: "Failed to get jobs profile.",
+      message: "Failed to save job.",
       error: error.message,
     });
   }
-}
+};
 
-module.exports = {
-  searchJobs,
-  getStoredJobs,
-  getJobsProfile,
+export const markJobApplied = async (req, res) => {
+  try {
+    const userEmail = req.user?.email;
+    const { id } = req.params;
+    const { applyUrl = "" } = req.body || {};
+
+    const job = await Job.findOneAndUpdate(
+      { _id: id, profileEmail: userEmail },
+      {
+        applied: true,
+        appliedAt: new Date(),
+        skipped: false,
+        skippedAt: null,
+        ...(applyUrl ? { applyUrl } : {}),
+      },
+      { new: true }
+    );
+
+    if (!job) {
+      return res.status(404).json({
+        success: false,
+        message: "Job not found.",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Job marked as applied.",
+      job,
+    });
+  } catch (error) {
+    console.error("markJobApplied error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to mark job as applied.",
+      error: error.message,
+    });
+  }
+};
+
+export const skipJob = async (req, res) => {
+  try {
+    const userEmail = req.user?.email;
+    const { id } = req.params;
+
+    const job = await Job.findOneAndUpdate(
+      { _id: id, profileEmail: userEmail },
+      {
+        skipped: true,
+        skippedAt: new Date(),
+      },
+      { new: true }
+    );
+
+    if (!job) {
+      return res.status(404).json({
+        success: false,
+        message: "Job not found.",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Job skipped successfully.",
+      job,
+    });
+  } catch (error) {
+    console.error("skipJob error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to skip job.",
+      error: error.message,
+    });
+  }
 };

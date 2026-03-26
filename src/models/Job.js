@@ -1,12 +1,19 @@
 import mongoose from "mongoose";
 
-const jobSchema = new mongoose.Schema(
+const JobSchema = new mongoose.Schema(
   {
     jobId: {
       type: String,
-      default: "",
-      index: true,
+      required: true,
+      trim: true,
     },
+    profileEmail: {
+      type: String,
+      required: true,
+      trim: true,
+      lowercase: true,
+    },
+
     title: {
       type: String,
       default: "",
@@ -22,7 +29,16 @@ const jobSchema = new mongoose.Schema(
       default: "",
       trim: true,
     },
-    country: {
+    description: {
+      type: String,
+      default: "",
+    },
+    jobUrl: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    applyUrl: {
       type: String,
       default: "",
       trim: true,
@@ -37,15 +53,23 @@ const jobSchema = new mongoose.Schema(
       default: "",
       trim: true,
     },
-    applyUrl: {
+    country: {
+      type: String,
+      default: "",
+      trim: true,
+      lowercase: true,
+    },
+    remote: {
+      type: Boolean,
+      default: false,
+    },
+
+    employmentType: {
       type: String,
       default: "",
       trim: true,
     },
-    description: {
-      type: String,
-      default: "",
-    },
+
     salaryMin: {
       type: Number,
       default: null,
@@ -59,25 +83,12 @@ const jobSchema = new mongoose.Schema(
       default: "",
       trim: true,
     },
-    employmentType: {
-      type: String,
-      default: "",
-      trim: true,
-    },
-    remote: {
-      type: Boolean,
-      default: false,
-    },
-
-    profileEmail: {
-      type: String,
-      default: "",
-      trim: true,
-      lowercase: true,
-      index: true,
-    },
 
     score: {
+      type: Number,
+      default: 0,
+    },
+    matchScore: {
       type: Number,
       default: 0,
     },
@@ -94,14 +105,14 @@ const jobSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
-    skipped: {
-      type: Boolean,
-      default: false,
-    },
-
     appliedAt: {
       type: Date,
       default: null,
+    },
+
+    skipped: {
+      type: Boolean,
+      default: false,
     },
     skippedAt: {
       type: Date,
@@ -118,16 +129,20 @@ const jobSchema = new mongoose.Schema(
       default: null,
     },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+  }
 );
 
-jobSchema.index({ profileEmail: 1, jobId: 1 }, { unique: false });
-jobSchema.index({ profileEmail: 1, shortlisted: 1 });
-jobSchema.index({ profileEmail: 1, applied: 1 });
-jobSchema.index({ profileEmail: 1, skipped: 1 });
-jobSchema.index({ profileEmail: 1, createdAt: -1 });
+// One user can save a given job only once
+JobSchema.index({ jobId: 1, profileEmail: 1 }, { unique: true });
 
-const Job = mongoose.models.Job || mongoose.model("Job", jobSchema);
+// Useful query indexes
+JobSchema.index({ profileEmail: 1, createdAt: -1 });
+JobSchema.index({ profileEmail: 1, applied: 1 });
+JobSchema.index({ profileEmail: 1, skipped: 1 });
+JobSchema.index({ profileEmail: 1, shortlisted: 1 });
 
-export { Job };
+const Job = mongoose.models.Job || mongoose.model("Job", JobSchema);
+
 export default Job;

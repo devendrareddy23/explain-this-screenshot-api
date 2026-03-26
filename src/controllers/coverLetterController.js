@@ -10,7 +10,12 @@ export const generateCoverLetter = async (req, res) => {
   try {
     const { resumeText, jobDescription, companyName, roleTitle } = req.body || {};
 
-    if (!resumeText || !jobDescription) {
+    const safeResumeText = (resumeText || "").trim();
+    const safeJobDescription = (jobDescription || "").trim();
+    const safeCompanyName = (companyName || "").trim();
+    const safeRoleTitle = (roleTitle || "").trim();
+
+    if (!safeResumeText || !safeJobDescription) {
       return res.status(400).json({
         success: false,
         message: "resumeText and jobDescription are required.",
@@ -36,47 +41,49 @@ export const generateCoverLetter = async (req, res) => {
 You are an expert job application writer.
 
 STRICT RULES:
-- Do NOT assume any specific technology (Node.js, Java, etc.) unless provided
-- Use ONLY the resumeText and jobDescription provided
-- Do NOT reuse previous user's data
-- Do NOT inject default profiles
-- Keep it realistic and tailored
+- Use ONLY the current request data
+- Do NOT assume Node.js, backend, Java, Python, QA, product, or any other domain unless present in the input
+- Do NOT inject any default candidate profile
+- Do NOT reuse previous user data
+- Do NOT invent fake experience, fake projects, or fake company names
+- Keep the letter realistic, concise, and tailored to the provided resume and job description
+- Return plain text only
 
 STRUCTURE:
-- Short intro (role + interest)
-- Why candidate is strong fit
-- Skills aligned with job description
-- 1–2 relevant achievements
+- Greeting
+- Short intro showing interest in the role
+- Why the candidate is a strong fit based on the provided resume
+- Relevant skills and experience aligned to the job description
 - Confident closing
-
-No markdown. Plain clean text.
-          `,
+          `.trim(),
         },
         {
           role: "user",
           content: `
 RESUME:
-${resumeText}
+${safeResumeText}
 
 JOB DESCRIPTION:
-${jobDescription}
+${safeJobDescription}
 
 COMPANY:
-${companyName || "Not specified"}
+${safeCompanyName || "Not specified"}
 
 ROLE:
-${roleTitle || "Not specified"}
-          `,
+${safeRoleTitle || "Not specified"}
+          `.trim(),
         },
       ],
     });
 
     const coverLetter =
-      response.choices?.[0]?.message?.content || "No cover letter generated.";
+      response.choices?.[0]?.message?.content?.trim() || "No cover letter generated.";
 
-    return res.json({
+    return res.status(200).json({
       success: true,
+      message: "Cover letter generated successfully.",
       coverLetter,
+      result: coverLetter,
     });
   } catch (error) {
     console.error("Cover letter error:", error);
