@@ -3,13 +3,14 @@ import User from "../models/User.js";
 
 export const protect = async (req, res, next) => {
   try {
-    let token = null;
+    let token;
 
-    if (
-      req.headers.authorization &&
-      req.headers.authorization.startsWith("Bearer ")
-    ) {
-      token = req.headers.authorization.split(" ")[1];
+    if (req.headers.authorization) {
+      const parts = req.headers.authorization.split(" ");
+
+      if (parts[0] === "Bearer") {
+        token = parts[1];
+      }
     }
 
     if (!token) {
@@ -26,19 +27,18 @@ export const protect = async (req, res, next) => {
     if (!user) {
       return res.status(401).json({
         success: false,
-        message: "Not authorized. User not found.",
+        message: "User not found",
       });
     }
 
     req.user = user;
+
     next();
   } catch (error) {
-    return res.status(401).json({
+    console.error("AUTH ERROR:", error);
+    res.status(401).json({
       success: false,
-      message: "Not authorized. Token failed.",
-      error: error.message,
+      message: "Token failed",
     });
   }
 };
-
-export const authMiddleware = protect;

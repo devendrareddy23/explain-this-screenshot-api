@@ -1,9 +1,9 @@
 import express from "express";
 import { protect } from "../middleware/authMiddleware.js";
-import { resumeTailor } from "../controllers/resumeTailorController.js";
+import { autoApply } from "../controllers/autoApplyController.js";
 
 const router = express.Router();
 
-router.post("/", protect, resumeTailor);
+router.post("/me", protect, autoApply);
 
 export default router;

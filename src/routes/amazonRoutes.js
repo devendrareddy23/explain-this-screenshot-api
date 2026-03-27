@@ -1,9 +1,9 @@
 import express from "express";
+import { findProducts } from "../controllers/amazonController.js";
 import { protect } from "../middleware/authMiddleware.js";
-import { resumeTailor } from "../controllers/resumeTailorController.js";
 
 const router = express.Router();
 
-router.post("/", protect, resumeTailor);
+router.post("/find", protect, findProducts);
 
 export default router;

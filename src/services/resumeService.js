@@ -1,67 +1,82 @@
 import OpenAI from "openai";
 
-function getOpenAIClient() {
+const getOpenAIClient = () => {
   const apiKey = process.env.OPENAI_API_KEY;
 
   if (!apiKey) {
-    return null;
+    throw new Error("OPENAI_API_KEY is missing. Add it to your backend .env file and restart the server.");
   }
 
   return new OpenAI({ apiKey });
-}
+};
 
-export async function generateTailoredResume({ resumeText, jobDescription }) {
+export const tailorResume = async (resumeText, jobDescription) => {
+  if (!resumeText || !jobDescription) {
+    throw new Error("Missing resume or job description");
+  }
+
   const client = getOpenAIClient();
 
-  if (!client) {
-    throw new Error("OPENAI_API_KEY is missing in environment.");
-  }
+  const prompt = `
+You are a top FAANG-level recruiter.
 
-  const safeResumeText = (resumeText || "").trim();
-  const safeJobDescription = (jobDescription || "").trim();
+Rewrite the candidate's resume to match the job description.
 
-  if (!safeResumeText || !safeJobDescription) {
-    throw new Error("resumeText and jobDescription are required.");
-  }
+STRICT RULES:
+- No generic text
+- No apologies
+- No placeholders
+- No markdown formatting
+- Use strong action verbs
+- Make it ATS optimized
+- Highlight measurable impact
+- Tailor SUMMARY, SKILLS, EXPERIENCE, and PROJECTS to the job
+- Keep it professional and concise
+
+CANDIDATE RESUME:
+${resumeText}
+
+JOB DESCRIPTION:
+${jobDescription}
+
+OUTPUT FORMAT:
+
+SUMMARY:
+...
+
+SKILLS:
+- ...
+- ...
+
+EXPERIENCE:
+- ...
+- ...
+
+PROJECTS:
+- ...
+- ...
+`;
 
   const response = await client.chat.completions.create({
     model: "gpt-4o-mini",
-    temperature: 0.3,
+    temperature: 0.7,
     messages: [
       {
         role: "system",
-        content: `
-You are an expert resume tailoring assistant.
-
-STRICT RULES:
-- Use ONLY the resume text and job description provided in this request
-- Do NOT inject any default candidate profile
-- Do NOT assume Node.js, backend, or any other technology unless it appears in the input
-- Do NOT invent fake experience, fake metrics, fake companies, or fake projects
-- Rewrite the resume so it better matches the target job description
-- Keep the content ATS-friendly and professional
-- Return plain text only
-
-RETURN FORMAT:
-Professional Summary
-Key Skills
-Tailored Experience Points
-Suggested Projects
-ATS Keywords
-        `.trim(),
+        content: "You are an expert recruiter and resume writer.",
       },
       {
         role: "user",
-        content: `
-RESUME:
-${safeResumeText}
-
-JOB DESCRIPTION:
-${safeJobDescription}
-        `.trim(),
+        content: prompt,
       },
     ],
   });
 
-  return response.choices?.[0]?.message?.content?.trim() || "No tailored resume generated.";
-}
+  return response.choices[0].message.content;
+};
+
+export const generateTailoredResume = async (resumeText, jobDescription) => {
+  return tailorResume(resumeText, jobDescription);
+};
+
+export default tailorResume;

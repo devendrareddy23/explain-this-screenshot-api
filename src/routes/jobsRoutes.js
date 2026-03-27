@@ -64,9 +64,9 @@ router.post("/search", protect, async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      totalFetched: result.totalFetched,
-      totalFinal: result.totalFinal,
-      jobs: result.jobs,
+      totalFetched: result.totalFetched || 0,
+      totalFinal: result.totalFinal || 0,
+      jobs: Array.isArray(result.jobs) ? result.jobs : [],
       usedProfileEmail: userEmail,
     });
   } catch (error) {
@@ -239,6 +239,7 @@ router.patch("/:jobId/apply", protect, async (req, res) => {
           applied: true,
           skipped: false,
           appliedAt: new Date(),
+          skippedAt: null,
         },
       },
       { new: true }
