@@ -1,5 +1,6 @@
 const axios = require("axios");
 const AutoHuntJob = require("../models/AutoHuntJob");
+const JOB_SOURCE_TIMEOUT_MS = 20000;
 
 const normalizeText = (value = "") => String(value).toLowerCase().trim();
 
@@ -250,7 +251,9 @@ const fetchIndiaJobsFromAdzuna = async ({
 
   const url = `https://api.adzuna.com/v1/api/jobs/in/search/${page}?app_id=${appId}&app_key=${appKey}&results_per_page=20&what=${encodedSearch}&where=India&content-type=application/json`;
 
-  const response = await axios.get(url);
+  const response = await axios.get(url, {
+    timeout: JOB_SOURCE_TIMEOUT_MS,
+  });
 
   return response.data.results || [];
 };

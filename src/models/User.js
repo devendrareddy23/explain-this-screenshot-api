@@ -50,9 +50,50 @@ const userSchema = new mongoose.Schema(
       type: Number,
       default: 0
     },
+    masterResumeText: {
+      type: String,
+      default: ""
+    },
+    masterResumeUpdatedAt: {
+      type: Date,
+      default: null
+    },
     usageLastResetAt: {
       type: Date,
       default: Date.now
+    },
+    applicationsUsed: {
+      type: Number,
+      default: 0
+    },
+    referralCode: {
+      type: String,
+      unique: true,
+      sparse: true,
+      trim: true,
+      uppercase: true,
+      default: ""
+    },
+    referredBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null
+    },
+    referralFreeMonthsEarned: {
+      type: Number,
+      default: 0
+    },
+    referralFreeWeeksGranted: {
+      type: Number,
+      default: 0
+    },
+    referralCreditsExpiresAt: {
+      type: Date,
+      default: null
+    },
+    trialEndsAt: {
+      type: Date,
+      default: null
     }
   },
   {

@@ -11,18 +11,11 @@ import billingRoutes from "./routes/billingRoutes.js";
 import jobsRoutes from "./routes/jobsRoutes.js";
 import autoApplyRoutes from "./routes/autoApplyRoutes.js";
 import resumeTailorRoutes from "./routes/resumeTailorRoutes.js";
-import preferencesRoutes from "./routes/preferencesRoutes.js";
-import resumeVaultRoutes from "./routes/resumeVaultRoutes.js";
-import outreachRoutes from "./routes/outreachRoutes.js";
-import referralRoutes from "./routes/referralRoutes.js";
-import applicationRoutes from "./routes/applicationRoutes.js";
-import statsRoutes from "./routes/statsRoutes.js";
 import { startAutoApplyCron } from "./services/autoApplyService.js";
 
 dotenv.config();
 
 const app = express();
-const recruiterOutreachEnabled = process.env.ENABLE_RECRUITER_OUTREACH === "true";
 
 app.use(
   cors({
@@ -55,14 +48,6 @@ app.use("/api/cover-letter", coverLetterRoutes);
 app.use("/api/billing", billingRoutes);
 app.use("/api/jobs", jobsRoutes);
 app.use("/api/auto-apply", autoApplyRoutes);
-app.use("/api/preferences", preferencesRoutes);
-app.use("/api/resume-vault", resumeVaultRoutes);
-if (recruiterOutreachEnabled) {
-  app.use("/api/outreach", outreachRoutes);
-}
-app.use("/api/referrals", referralRoutes);
-app.use("/api/applications", applicationRoutes);
-app.use("/api/stats", statsRoutes);
 
 app.use((req, res) => {
   res.status(404).json({

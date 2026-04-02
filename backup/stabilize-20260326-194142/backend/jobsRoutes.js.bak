@@ -1,0 +1,95 @@
+import express from "express";
+import Job from "../models/Job.js";
+import protect from "../middleware/protect.js";
+
+const router = express.Router();
+
+/**
+ * GET STORED JOBS
+ */
+router.get("/stored", protect, async (req, res) => {
+  try {
+    const jobs = await Job.find({ profileEmail: req.user.email }).sort({
+      createdAt: -1,
+    });
+
+    res.json({
+      success: true,
+      total: jobs.length,
+      jobs,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch stored jobs",
+    });
+  }
+});
+
+/**
+ * MARK AS APPLIED
+ */
+router.patch("/:id/applied", protect, async (req, res) => {
+  try {
+    const job = await Job.findById(req.params.id);
+
+    if (!job) {
+      return res.status(404).json({
+        success: false,
+        message: "Job not found",
+      });
+    }
+
+    job.applied = true;
+    job.appliedAt = new Date();
+
+    await job.save();
+
+    res.json({
+      success: true,
+      message: "Job marked as applied",
+      job,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Failed to mark job as applied",
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * SKIP JOB
+ */
+router.patch("/:id/skip", protect, async (req, res) => {
+  try {
+    const job = await Job.findById(req.params.id);
+
+    if (!job) {
+      return res.status(404).json({
+        success: false,
+        message: "Job not found",
+      });
+    }
+
+    job.skipped = true;
+    job.skippedAt = new Date();
+
+    await job.save();
+
+    res.json({
+      success: true,
+      message: "Job skipped",
+      job,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Failed to skip job",
+      error: error.message,
+    });
+  }
+});
+
+export default router;

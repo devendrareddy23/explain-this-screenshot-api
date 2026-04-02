@@ -1,5 +1,15 @@
 import axios from "axios";
 import Job from "../models/Job.js";
+import User from "../models/User.js";
+import Application from "../models/Application.js";
+import { getJobSourceMetadata } from "./jobSourceMetadataService.js";
+import { createRecruiterOutreachForJob } from "./recruiterOutreachService.js";
+import { scoreJobMatch } from "./jobMatchScoringService.js";
+import { sendNearLimitAlertIfNeeded, sendPerfectMatchAlerts } from "./notificationAutomationService.js";
+import { fetchLinkedInJobsViaApify } from "./linkedinApifyService.js";
+import { JOB_SOURCE_TIMEOUT_MS } from "./serviceTimeouts.js";
+
+const RECRUITER_OUTREACH_ENABLED = process.env.ENABLE_RECRUITER_OUTREACH === "true";
 
 const expandSearchTerms = (search) => {
   const base = String(search || "").trim();
@@ -17,67 +27,6 @@ const expandSearchTerms = (search) => {
   ];
 
   return [...new Set(terms.map((term) => term.trim()).filter(Boolean))];
-};
-
-const includesAny = (text, keywords = []) => {
-  return keywords.some((keyword) => text.includes(keyword));
-};
-
-const scoreJob = (job) => {
-  const text = `${job.title || ""} ${job.description || ""}`.toLowerCase();
-
-  let score = 0;
-  const reasons = [];
-
-  if (includesAny(text, ["node", "node.js", "node js"])) {
-    score += 40;
-    reasons.push("Node.js match");
-  }
-
-  if (includesAny(text, ["backend", "back-end", "server side", "server-side"])) {
-    score += 30;
-    reasons.push("Backend match");
-  }
-
-  if (includesAny(text, ["express", "express.js", "express js"])) {
-    score += 20;
-    reasons.push("Express match");
-  }
-
-  if (includesAny(text, ["api", "rest api", "restful", "microservices"])) {
-    score += 10;
-    reasons.push("API match");
-  }
-
-  if (includesAny(text, ["mongodb", "mongoose", "database", "postgresql", "sql"])) {
-    score += 10;
-    reasons.push("Database match");
-  }
-
-  if (includesAny(text, ["aws", "azure", "docker", "ci/cd"])) {
-    score += 5;
-    reasons.push("Cloud/devops bonus");
-  }
-
-  if (includesAny(text, ["frontend", "front-end", "react native"])) {
-    score -= 20;
-  }
-
-  if (includesAny(text, ["wordpress", "shopify"])) {
-    score -= 30;
-  }
-
-  if (includesAny(text, ["php", "laravel"])) {
-    score -= 10;
-  }
-
-  return { score, reasons };
-};
-
-const getMatchLabel = (score) => {
-  if (score >= 60) return "Top Match";
-  if (score >= 35) return "Good Match";
-  return "Low Match";
 };
 
 const looksRemote = (job) => {
@@ -111,10 +60,287 @@ const fetchAdzunaJobsForTerm = async ({ term, country, location, limit, appId, a
 
   const response = await axios.get(url, {
     params,
-    timeout: 20000,
+    timeout: JOB_SOURCE_TIMEOUT_MS,
   });
 
+  console.log("Adzuna raw response:", JSON.stringify(response.data, null, 2));
+
   return Array.isArray(response.data?.results) ? response.data.results : [];
+};
+
+const resolveLocation = (job) => {
+  if (job?.location?.display_name) {
+    return String(job.location.display_name);
+  }
+
+  if (Array.isArray(job?.location?.area) && job.location.area.length) {
+    return job.location.area.filter(Boolean).join(", ");
+  }
+
+  return "";
+};
+
+const resolveCompany = (job) => {
+  if (job?.company?.display_name) {
+    return String(job.company.display_name);
+  }
+
+  return "";
+};
+
+const resolveSalaryCurrency = (job, country) => {
+  if (job?.salary_currency) {
+    return String(job.salary_currency);
+  }
+
+  const normalizedCountry = String(country || "").trim().toLowerCase();
+
+  if (normalizedCountry === "us") return "USD";
+  if (normalizedCountry === "gb") return "GBP";
+  if (normalizedCountry === "in") return "INR";
+
+  return "";
+};
+
+const normalizeAdzunaJob = ({
+  job,
+  profileEmail,
+  safeCountry,
+  normalizedWorkTypes,
+  preferredRoles = [],
+  preferredLocations = [],
+  workTypes = [],
+  expectedSalaryMin = null,
+  companySizePreference = "any",
+  resumeText = "",
+  careerDna = null,
+}) => {
+  const title = String(job?.title || "").trim();
+  const description = String(job?.description || "").trim();
+  const company = resolveCompany(job);
+  const location = resolveLocation(job);
+  const applyUrl = String(job?.redirect_url || "").trim();
+  const sourceUrl = applyUrl;
+  const remote = looksRemote({
+    ...job,
+    title,
+    description,
+    location: { display_name: location },
+  });
+  const locationText = location.toLowerCase();
+  const sourceMetadata = getJobSourceMetadata("Adzuna");
+  const source = sourceMetadata.source;
+  const autoApplySupported = sourceMetadata.autoApplySupported;
+  const searchSupported = true;
+  const shortlistSupported = true;
+
+  const matchesWorkType =
+    normalizedWorkTypes.length === 0 ||
+    normalizedWorkTypes.includes("remote") && remote ||
+    normalizedWorkTypes.includes("hybrid") && locationText.includes("hybrid") ||
+    normalizedWorkTypes.includes("onsite") && !remote;
+
+  const weightedScore = scoreJobMatch({
+    job: {
+      title,
+      description,
+      location,
+      remote,
+      salaryMin: typeof job?.salary_min === "number" ? job.salary_min : null,
+      salaryMax: typeof job?.salary_max === "number" ? job.salary_max : null,
+    },
+    preferredRoles,
+    preferredLocations,
+    workTypes,
+    expectedSalaryMin,
+    companySizePreference,
+    resumeText,
+    careerDna,
+  });
+
+  const reasons = [
+    weightedScore.breakdown.skills.note,
+    weightedScore.breakdown.experience.note,
+    weightedScore.breakdown.location.note,
+    weightedScore.breakdown.salary.note,
+    weightedScore.breakdown.companySize.note,
+  ].filter(Boolean);
+
+  return {
+    jobId: String(job?.id || ""),
+    profileEmail,
+    title,
+    company,
+    location,
+    description,
+    jobUrl: applyUrl,
+    applyUrl,
+    source,
+    sourceUrl,
+    country: safeCountry,
+    remote,
+    employmentType: String(job?.contract_type || job?.contract_time || "").trim(),
+    salaryMin: typeof job?.salary_min === "number" ? job.salary_min : null,
+    salaryMax: typeof job?.salary_max === "number" ? job.salary_max : null,
+    salaryCurrency: resolveSalaryCurrency(job, safeCountry),
+    score: weightedScore.score100,
+    matchScore: weightedScore.score100,
+    aiScore10: weightedScore.score10,
+    aiMatchLabel: weightedScore.label,
+    aiScoreReason: reasons.join(" "),
+    aiScoreBreakdown: weightedScore.breakdown,
+    reasons,
+    shortlisted: weightedScore.shouldShowToUser,
+    workflowState: weightedScore.shouldShowToUser ? "shortlisted" : "scored",
+    workflowTimeline: [
+      {
+        status: "found",
+        label: "Job Found",
+        note: "Fetched from supported search source.",
+        at: new Date(),
+      },
+      {
+        status: weightedScore.shouldShowToUser ? "shortlisted" : "scored",
+        label: weightedScore.shouldShowToUser ? "Shortlisted" : "Scored",
+        note:
+          weightedScore.shouldShowToUser
+            ? `${weightedScore.label} based on weighted scoring.`
+            : "Weak match filtered below user-facing threshold.",
+        at: new Date(),
+      },
+    ],
+    manualActionNeeded: sourceMetadata.manualActionRequired,
+    manualActionRequired: sourceMetadata.manualActionRequired,
+    manualActionReason: sourceMetadata.manualActionReason,
+    sourceCapabilities: {
+      searchSupported,
+      shortlistSupported,
+      autoApplySupported,
+    },
+    rawJobData: job,
+    _matchesWorkType: matchesWorkType,
+  };
+};
+
+const normalizeLinkedInJob = ({
+  job,
+  profileEmail,
+  safeCountry,
+  normalizedWorkTypes,
+  preferredRoles = [],
+  preferredLocations = [],
+  workTypes = [],
+  expectedSalaryMin = null,
+  companySizePreference = "any",
+  resumeText = "",
+  careerDna = null,
+}) => {
+  const title = String(job?.title || "").trim();
+  const description = String(job?.description || "").trim();
+  const company = String(job?.company || "").trim();
+  const location = String(job?.location || "").trim();
+  const applyUrl = String(job?.applyUrl || "").trim();
+  const remote = `${title} ${location} ${description}`.toLowerCase().includes("remote");
+  const locationText = location.toLowerCase();
+  const sourceMetadata = getJobSourceMetadata("LinkedIn");
+  const easyApplyAvailable = Boolean(job?.easyApplyAvailable);
+
+  const matchesWorkType =
+    normalizedWorkTypes.length === 0 ||
+    normalizedWorkTypes.includes("remote") && remote ||
+    normalizedWorkTypes.includes("hybrid") && locationText.includes("hybrid") ||
+    normalizedWorkTypes.includes("onsite") && !remote;
+
+  const weightedScore = scoreJobMatch({
+    job: {
+      title,
+      description,
+      location,
+      remote,
+      salaryMin: typeof job?.salaryMin === "number" ? job.salaryMin : null,
+      salaryMax: typeof job?.salaryMax === "number" ? job.salaryMax : null,
+    },
+    preferredRoles,
+    preferredLocations,
+    workTypes,
+    expectedSalaryMin,
+    companySizePreference,
+    resumeText,
+    careerDna,
+  });
+
+  const reasons = [
+    weightedScore.breakdown.skills.note,
+    weightedScore.breakdown.experience.note,
+    weightedScore.breakdown.location.note,
+    weightedScore.breakdown.salary.note,
+    weightedScore.breakdown.companySize.note,
+  ].filter(Boolean);
+
+  const easyApplyNote = easyApplyAvailable
+    ? "LinkedIn Easy Apply detected, but final submission must still be completed manually in-browser."
+    : sourceMetadata.manualActionReason;
+
+  return {
+    jobId: String(job?.jobId || ""),
+    profileEmail,
+    title,
+    company,
+    location,
+    description,
+    jobUrl: applyUrl,
+    applyUrl,
+    source: sourceMetadata.source,
+    sourceUrl: applyUrl,
+    country: safeCountry,
+    remote,
+    employmentType: "",
+    salaryMin: typeof job?.salaryMin === "number" ? job.salaryMin : null,
+    salaryMax: typeof job?.salaryMax === "number" ? job.salaryMax : null,
+    salaryCurrency: String(job?.salaryCurrency || "").trim(),
+    score: weightedScore.score100,
+    matchScore: weightedScore.score100,
+    aiScore10: weightedScore.score10,
+    aiMatchLabel: weightedScore.label,
+    aiScoreReason: reasons.join(" "),
+    aiScoreBreakdown: weightedScore.breakdown,
+    reasons,
+    shortlisted: weightedScore.shouldShowToUser,
+    workflowState: weightedScore.shouldShowToUser ? "shortlisted" : "scored",
+    workflowTimeline: [
+      {
+        status: "found",
+        label: "Job Found",
+        note: easyApplyAvailable
+          ? "Imported from LinkedIn source feed with Easy Apply availability detected."
+          : "Imported from LinkedIn source feed.",
+        at: new Date(),
+      },
+      {
+        status: weightedScore.shouldShowToUser ? "shortlisted" : "scored",
+        label: weightedScore.shouldShowToUser ? "Shortlisted" : "Scored",
+        note:
+          weightedScore.shouldShowToUser
+            ? `${weightedScore.label} based on weighted scoring.`
+            : "Weak match filtered below user-facing threshold.",
+        at: new Date(),
+      },
+    ],
+    manualActionNeeded: true,
+    manualActionRequired: true,
+    manualActionReason: easyApplyNote,
+    sourceCapabilities: {
+      searchSupported: true,
+      shortlistSupported: true,
+      autoApplySupported: false,
+    },
+    notes: easyApplyAvailable ? "LinkedIn Easy Apply available for manual completion." : "",
+    rawJobData: {
+      ...(job?.rawJobData || {}),
+      easyApplyAvailable,
+    },
+    _matchesWorkType: matchesWorkType,
+  };
 };
 
 export const searchScoreAndStoreJobs = async ({
@@ -122,9 +348,16 @@ export const searchScoreAndStoreJobs = async ({
   location = "",
   country = "in",
   remoteOnly = false,
+  workTypes = [],
   profileEmail,
   limit = 20,
   minimumScore = 0,
+  expectedSalaryMin = null,
+  companySizePreference = "any",
+  preferredRoles = [],
+  preferredLocations = [],
+  careerDna = null,
+  excludedJobIds = [],
 }) => {
   try {
     const appId = process.env.ADZUNA_APP_ID;
@@ -178,48 +411,108 @@ export const searchScoreAndStoreJobs = async ({
 
     const uniqueJobs = Array.from(uniqueJobsMap.values());
 
-    const processedJobs = uniqueJobs.map((job) => {
-      const { score, reasons } = scoreJob(job);
-      const remote = looksRemote(job);
-      const matchLabel = getMatchLabel(score);
+    const normalizedWorkTypes = Array.isArray(workTypes)
+      ? workTypes.map((item) => String(item).trim().toLowerCase())
+      : [];
 
-      return {
-        jobId: String(job.id || ""),
+    const userForScoring = await User.findOne({ email: profileEmail }).select("_id masterResumeText email plan");
+    const resumeText = String(userForScoring?.masterResumeText || "").trim();
+
+    const processedJobs = uniqueJobs.map((job) =>
+      normalizeAdzunaJob({
+        job,
         profileEmail,
-        title: String(job.title || ""),
-        company: String(job.company?.display_name || ""),
-        location: String(job.location?.display_name || ""),
-        description: String(job.description || ""),
-        jobUrl: String(job.redirect_url || ""),
-        applyUrl: String(job.redirect_url || ""),
-        source: "Adzuna",
-        sourceUrl: String(job.redirect_url || ""),
-        country: safeCountry,
-        remote,
-        employmentType: "",
-        salaryMin: typeof job.salary_min === "number" ? job.salary_min : null,
-        salaryMax: typeof job.salary_max === "number" ? job.salary_max : null,
-        salaryCurrency: "",
-        score,
-        matchScore: score,
-        reasons: [...reasons, matchLabel],
-        shortlisted: score >= 35,
-        rawJobData: job,
-      };
-    });
+        safeCountry,
+        normalizedWorkTypes,
+        preferredRoles,
+        preferredLocations,
+        workTypes,
+        expectedSalaryMin,
+        companySizePreference,
+        resumeText,
+        careerDna,
+      })
+    );
+
+    try {
+      const linkedinResponse = await fetchLinkedInJobsViaApify({
+        search,
+        location: safeLocation,
+        limit: safeLimit,
+      });
+
+      if (!linkedinResponse.skipped && Array.isArray(linkedinResponse.jobs)) {
+        const linkedinProcessed = linkedinResponse.jobs.map((job) =>
+          normalizeLinkedInJob({
+            job,
+            profileEmail,
+            safeCountry,
+            normalizedWorkTypes,
+            preferredRoles,
+            preferredLocations,
+            workTypes,
+            expectedSalaryMin,
+            companySizePreference,
+            resumeText,
+            careerDna,
+          })
+        );
+
+        processedJobs.push(...linkedinProcessed);
+      } else if (linkedinResponse.reason && !linkedinResponse.skipped) {
+        failedTerms.push({ term: "linkedin", message: linkedinResponse.reason });
+      }
+    } catch (error) {
+      failedTerms.push({
+        term: "linkedin",
+        message: error.response?.data?.message || error.message || "LinkedIn import failed.",
+      });
+    }
+
+    const excludedIds = new Set(
+      (Array.isArray(excludedJobIds) ? excludedJobIds : [])
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+    );
 
     const filteredJobs = processedJobs.filter((job) => {
       if (!job.jobId || !job.title) return false;
-      if (job.score < Math.max(20, Number(minimumScore) || 0)) return false;
+      if (Number(job.aiScore10 || 0) < 5) return false;
       if (remoteOnly && !job.remote) return false;
+      if (!job._matchesWorkType) return false;
+      if (excludedIds.has(String(job.jobId || "").trim())) return false;
       return true;
-    });
+    }).map(({ _matchesWorkType, ...job }) => job);
 
     filteredJobs.sort((a, b) => b.score - a.score);
 
+    const existingApplications = await Application.find({ profileEmail })
+      .select("jobId appliedAt user")
+      .lean();
+    const applicationByJobId = new Map(
+      existingApplications
+        .filter((item) => String(item.jobId || "").trim())
+        .map((item) => [String(item.jobId || "").trim(), item])
+    );
+    const hydratedJobs = filteredJobs.map((job) => {
+      const existingApplication = applicationByJobId.get(String(job.jobId || "").trim());
+
+      if (!existingApplication) {
+        return job;
+      }
+
+      return {
+        ...job,
+        applied: true,
+        appliedAt: existingApplication.appliedAt || new Date(),
+        appliedByUserId: existingApplication.user || null,
+        manualActionNeeded: false,
+      };
+    });
+
     await Job.deleteMany({ profileEmail });
 
-    if (filteredJobs.length === 0) {
+    if (hydratedJobs.length === 0) {
       return {
         success: true,
         totalFetched: allJobs.length,
@@ -229,7 +522,31 @@ export const searchScoreAndStoreJobs = async ({
       };
     }
 
-    const savedJobs = await Job.insertMany(filteredJobs, { ordered: false });
+    const savedJobs = await Job.insertMany(hydratedJobs, { ordered: false });
+
+    const user =
+      userForScoring?._id
+        ? userForScoring
+        : await User.findOne({ email: profileEmail }).select("_id email plan");
+
+    if (user?._id && RECRUITER_OUTREACH_ENABLED) {
+      await Promise.allSettled(
+        savedJobs.slice(0, 8).map((job) =>
+          createRecruiterOutreachForJob({
+            job,
+            userId: user._id,
+            profileEmail,
+          })
+        )
+      );
+    }
+
+    if (user?._id) {
+      await Promise.allSettled([
+        sendPerfectMatchAlerts({ user, jobs: savedJobs }),
+        sendNearLimitAlertIfNeeded({ user }),
+      ]);
+    }
 
     return {
       success: true,

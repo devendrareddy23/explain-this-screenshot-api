@@ -2,6 +2,7 @@ const { parseStringPromise } = require("xml2js");
 const SearchProfile = require("../models/SearchProfile");
 const Job = require("../models/Job");
 const MatchedJob = require("../models/MatchedJob");
+const JOB_SOURCE_TIMEOUT_MS = 20000;
 
 const REMOTIVE_BASE_URL = "https://remotive.com/api/remote-jobs";
 const WWR_RSS_URL = "https://weworkremotely.com/remote-jobs.rss";
@@ -242,7 +243,20 @@ function matchesAnyQuery(job, queries) {
 }
 
 async function fetchJson(url, headers = {}) {
-  const response = await fetch(url, { headers });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), JOB_SOURCE_TIMEOUT_MS);
+
+  let response;
+  try {
+    response = await fetch(url, { headers, signal: controller.signal });
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw new Error("Job source request timed out.");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (!response.ok) {
     const raw = await response.text();
@@ -253,7 +267,20 @@ async function fetchJson(url, headers = {}) {
 }
 
 async function fetchText(url, headers = {}) {
-  const response = await fetch(url, { headers });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), JOB_SOURCE_TIMEOUT_MS);
+
+  let response;
+  try {
+    response = await fetch(url, { headers, signal: controller.signal });
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw new Error("Job source request timed out.");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (!response.ok) {
     const raw = await response.text();

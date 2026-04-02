@@ -92,9 +92,146 @@ const JobSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    aiScore10: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 10,
+    },
+    aiScoreReason: {
+      type: String,
+      default: "",
+    },
+    aiScoreBreakdown: {
+      skills: {
+        score: { type: Number, default: 0 },
+        weight: { type: Number, default: 40 },
+        note: { type: String, default: "" },
+      },
+      experience: {
+        score: { type: Number, default: 0 },
+        weight: { type: Number, default: 20 },
+        note: { type: String, default: "" },
+      },
+      location: {
+        score: { type: Number, default: 0 },
+        weight: { type: Number, default: 20 },
+        note: { type: String, default: "" },
+      },
+      salary: {
+        score: { type: Number, default: 0 },
+        weight: { type: Number, default: 10 },
+        note: { type: String, default: "" },
+      },
+      companySize: {
+        score: { type: Number, default: 0 },
+        weight: { type: Number, default: 10 },
+        note: { type: String, default: "" },
+      },
+    },
+    aiMatchLabel: {
+      type: String,
+      enum: ["Strong Match", "Good Match", "Weak Match"],
+      default: "Weak Match",
+    },
     reasons: {
       type: [String],
       default: [],
+    },
+    workflowState: {
+      type: String,
+      enum: [
+        "found",
+        "scored",
+        "shortlisted",
+        "resume_tailored",
+        "cover_letter_generated",
+        "ready_to_apply",
+        "applied",
+        "failed",
+        "manual_action_needed",
+      ],
+      default: "found",
+    },
+    workflowTimeline: {
+      type: [
+        {
+          status: { type: String, default: "" },
+          label: { type: String, default: "" },
+          note: { type: String, default: "" },
+          at: { type: Date, default: Date.now },
+        },
+      ],
+      default: [],
+    },
+    manualActionNeeded: {
+      type: Boolean,
+      default: false,
+    },
+    manualActionRequired: {
+      type: Boolean,
+      default: false,
+    },
+    manualApplyInProgress: {
+      type: Boolean,
+      default: false,
+    },
+    manualApplyStartedAt: {
+      type: Date,
+      default: null,
+    },
+    manualActionReason: {
+      type: String,
+      default: "",
+    },
+    sourceCapabilities: {
+      searchSupported: { type: Boolean, default: true },
+      shortlistSupported: { type: Boolean, default: true },
+      autoApplySupported: { type: Boolean, default: false },
+    },
+    tailoredResumeText: {
+      type: String,
+      default: "",
+    },
+    resumeVariants: {
+      type: [
+        {
+          variantId: { type: String, default: "" },
+          label: { type: String, default: "" },
+          strategy: { type: String, default: "" },
+          text: { type: String, default: "" },
+          matchScore: { type: Number, default: 0 },
+          keywordsAdded: { type: [String], default: [] },
+          improvementSummary: { type: [String], default: [] },
+        },
+      ],
+      default: [],
+    },
+    selectedResumeVariant: {
+      type: String,
+      enum: ["A", "B", "C", ""],
+      default: "",
+    },
+    selectedResumeVariantReason: {
+      type: String,
+      default: "",
+    },
+    coverLetterText: {
+      type: String,
+      default: "",
+    },
+    applicationNotificationSentAt: {
+      type: Date,
+      default: null,
+    },
+    applicationNotificationStatus: {
+      type: String,
+      enum: ["pending", "sent", "failed"],
+      default: "pending",
+    },
+    applicationNotificationError: {
+      type: String,
+      default: "",
     },
 
     shortlisted: {
@@ -107,6 +244,11 @@ const JobSchema = new mongoose.Schema(
     },
     appliedAt: {
       type: Date,
+      default: null,
+    },
+    appliedByUserId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
       default: null,
     },
 
@@ -122,6 +264,49 @@ const JobSchema = new mongoose.Schema(
     notes: {
       type: String,
       default: "",
+    },
+    companyIntelligence: {
+      glassdoorRating: { type: Number, default: null },
+      commonComplaints: { type: [String], default: [] },
+      glassdoorStatus: { type: String, default: "" },
+      recentNews: {
+        type: [
+          {
+            title: { type: String, default: "" },
+            url: { type: String, default: "" },
+            publishedAt: { type: Date, default: null },
+          },
+        ],
+        default: [],
+      },
+      recentNewsStatus: { type: String, default: "" },
+      growthSignal: { type: String, default: "" },
+      techStack: { type: [String], default: [] },
+      salaryInsight: {
+        label: { type: String, default: "" },
+        source: { type: String, default: "" },
+      },
+      timeToHire: {
+        label: { type: String, default: "" },
+        isEstimated: { type: Boolean, default: false },
+        source: { type: String, default: "" },
+      },
+      recruiter: {
+        recruiterEmail: { type: String, default: "" },
+        recruiterName: { type: String, default: "" },
+        linkedinUrl: { type: String, default: "" },
+        source: { type: String, default: "" },
+      },
+      interviewProcess: {
+        summary: { type: String, default: "" },
+        source: { type: String, default: "" },
+      },
+      recommendation: {
+        label: { type: String, default: "" },
+        reason: { type: String, default: "" },
+      },
+      matchScore10: { type: Number, default: 0 },
+      confidenceNotes: { type: [String], default: [] },
     },
 
     rawJobData: {

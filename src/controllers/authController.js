@@ -1,6 +1,8 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
+import { applyReferralReward, ensureReferralCode } from "../services/referralService.js";
+import { getHireFlowScoreProfile } from "../services/hireFlowScoreService.js";
 
 const createToken = (user) => {
   return jwt.sign(
@@ -17,7 +19,7 @@ const createToken = (user) => {
 
 export const registerUser = async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, referralCode } = req.body;
 
     if (!name || !email || !password) {
       return res.status(400).json({
@@ -49,6 +51,9 @@ export const registerUser = async (req, res) => {
       coverLetterCount: 0,
     });
 
+    await ensureReferralCode(user);
+    await applyReferralReward({ newUser: user, referralCode });
+
     const token = createToken(user);
 
     return res.status(201).json({
@@ -60,6 +65,9 @@ export const registerUser = async (req, res) => {
         name: user.name,
         email: user.email,
         plan: user.plan,
+        referralCode: user.referralCode,
+        trialEndsAt: user.trialEndsAt,
+        referralCreditsExpiresAt: user.referralCreditsExpiresAt,
         usageDate: user.usageDate,
         resumeCount: user.resumeCount,
         coverLetterCount: user.coverLetterCount,
@@ -107,6 +115,8 @@ export const loginUser = async (req, res) => {
 
     const token = createToken(user);
 
+    await ensureReferralCode(user);
+
     return res.status(200).json({
       success: true,
       message: "Login successful.",
@@ -116,6 +126,9 @@ export const loginUser = async (req, res) => {
         name: user.name,
         email: user.email,
         plan: user.plan,
+        referralCode: user.referralCode,
+        trialEndsAt: user.trialEndsAt,
+        referralCreditsExpiresAt: user.referralCreditsExpiresAt,
         usageDate: user.usageDate,
         resumeCount: user.resumeCount,
         coverLetterCount: user.coverLetterCount,
@@ -141,15 +154,41 @@ export const getMe = async (req, res) => {
       });
     }
 
+    const hireFlowScore = await getHireFlowScoreProfile({
+      userId: req.user._id,
+      profileEmail: req.user.email,
+    });
+
     return res.status(200).json({
       success: true,
       user,
+      hireFlowScore,
     });
   } catch (error) {
     console.error("Get me error:", error);
     return res.status(500).json({
       success: false,
       message: "Failed to fetch user profile.",
+    });
+  }
+};
+
+export const getMyHireFlowScore = async (req, res) => {
+  try {
+    const hireFlowScore = await getHireFlowScoreProfile({
+      userId: req.user._id,
+      profileEmail: req.user.email,
+    });
+
+    return res.status(200).json({
+      success: true,
+      hireFlowScore,
+    });
+  } catch (error) {
+    console.error("Get HireFlow score error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to calculate HireFlow score.",
     });
   }
 };
