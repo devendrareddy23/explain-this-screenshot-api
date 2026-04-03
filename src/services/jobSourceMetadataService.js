@@ -28,8 +28,8 @@ const SOURCE_CATALOG = [
     manualActionReason:
       "Indeed application flows vary by employer and need manual review before submission.",
     ingestMode: "adapter_ready",
-    liveSearchImplemented: false,
-    status: "planned",
+    liveSearchImplemented: true,
+    status: "active",
   },
   {
     key: "glassdoor",
@@ -54,14 +54,14 @@ const SOURCE_CATALOG = [
     category: "global",
     searchSupport: "Adapter-ready",
     shortlistSupport: "Supported",
-    autoApplyLabel: "Partial Auto Apply",
-    autoApplySupported: true,
-    manualActionRequired: false,
+    autoApplyLabel: "Manual Apply",
+    autoApplySupported: false,
+    manualActionRequired: true,
     manualActionReason:
-      "Wellfound can support partial automation, but some employer-specific steps may still open externally.",
+      "Wellfound jobs should open in the original portal for manual completion.",
     ingestMode: "adapter_ready",
-    liveSearchImplemented: false,
-    status: "planned",
+    liveSearchImplemented: true,
+    status: "active",
   },
   {
     key: "remotive",
@@ -76,8 +76,8 @@ const SOURCE_CATALOG = [
     manualActionReason:
       "Remotive listings commonly hand off to employer application pages, so final submission stays manual.",
     ingestMode: "adapter_ready",
-    liveSearchImplemented: false,
-    status: "planned",
+    liveSearchImplemented: true,
+    status: "active",
   },
   {
     key: "weworkremotely",
@@ -92,8 +92,24 @@ const SOURCE_CATALOG = [
     manualActionReason:
       "WeWorkRemotely typically redirects to external employer flows, so manual completion is required.",
     ingestMode: "adapter_ready",
-    liveSearchImplemented: false,
-    status: "planned",
+    liveSearchImplemented: true,
+    status: "active",
+  },
+  {
+    key: "remoteok",
+    name: "RemoteOK",
+    market: "Global",
+    category: "global",
+    searchSupport: "API/feed friendly",
+    shortlistSupport: "Supported",
+    autoApplyLabel: "Manual Apply",
+    autoApplySupported: false,
+    manualActionRequired: true,
+    manualActionReason:
+      "RemoteOK listings open on the original employer workflow and should stay manual.",
+    ingestMode: "api_live",
+    liveSearchImplemented: true,
+    status: "active",
   },
   {
     key: "greenhouse",
@@ -108,8 +124,8 @@ const SOURCE_CATALOG = [
     manualActionReason:
       "Greenhouse jobs are excellent for search aggregation, but submission should remain manual unless a first-party apply integration exists.",
     ingestMode: "feed_ready",
-    liveSearchImplemented: false,
-    status: "planned",
+    liveSearchImplemented: true,
+    status: "active",
   },
   {
     key: "lever",
@@ -156,8 +172,8 @@ const SOURCE_CATALOG = [
     manualActionReason:
       "Naukri application flows require a manual completion step to stay reliable.",
     ingestMode: "adapter_ready",
-    liveSearchImplemented: false,
-    status: "planned",
+    liveSearchImplemented: true,
+    status: "active",
   },
   {
     key: "shine",

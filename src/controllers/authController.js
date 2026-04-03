@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 import { applyReferralReward, ensureReferralCode } from "../services/referralService.js";
 import { getHireFlowScoreProfile } from "../services/hireFlowScoreService.js";
+import { populateJobQueueForUser } from "../services/jobSearchService.js";
 
 const createToken = (user) => {
   return jwt.sign(
@@ -53,6 +54,14 @@ export const registerUser = async (req, res) => {
 
     await ensureReferralCode(user);
     await applyReferralReward({ newUser: user, referralCode });
+    try {
+      await populateJobQueueForUser({
+        userId: user._id,
+        profileEmail: user.email,
+      });
+    } catch (queueError) {
+      console.error("Initial job queue population failed:", queueError?.message || queueError);
+    }
 
     const token = createToken(user);
 

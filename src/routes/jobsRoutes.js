@@ -6,7 +6,7 @@ import UserPreference from "../models/UserPreference.js";
 import Application from "../models/Application.js";
 import SkippedJob from "../models/SkippedJob.js";
 import protect from "../middleware/protect.js";
-import { searchScoreAndStoreJobs } from "../services/jobSearchService.js";
+import { populateJobQueueForUser, searchScoreAndStoreJobs } from "../services/jobSearchService.js";
 import { generateResumeVariants } from "../services/resumeService.js";
 import { generateCoverLetter as generateCoverLetterText } from "../services/coverLetterService.js";
 import { recordApplication } from "../services/applicationService.js";
@@ -256,6 +256,14 @@ async function handleJobSearch(req, res) {
       excludedJobIds: [...excludedIds],
     });
 
+    if (!result?.success) {
+      return res.status(503).json({
+        success: false,
+        message: result?.message || "Failed to search jobs.",
+        failedTerms: Array.isArray(result?.failedTerms) ? result.failedTerms : [],
+      });
+    }
+
     const filteredJobs = filterJobsByExcludedIds(result?.jobs || [], excludedIds);
     const normalizedJobs = filteredJobs.map(serializeJobForClient);
 
@@ -284,6 +292,48 @@ async function handleJobSearch(req, res) {
  */
 router.get("/search", protect, handleJobSearch);
 router.post("/search", protect, handleJobSearch);
+
+router.post("/refresh", protect, async (req, res) => {
+  try {
+    const excludedIds = await getExcludedJobIdsForUser(req.user._id);
+    const result = await populateJobQueueForUser({
+      userId: req.user._id,
+      profileEmail: req.user.email,
+    });
+
+    if (!result?.success) {
+      return res.status(503).json({
+        success: false,
+        message: result?.message || "Failed to refresh jobs.",
+        failedTerms: Array.isArray(result?.failedTerms) ? result.failedTerms : [],
+      });
+    }
+
+    const filteredJobs = filterJobsByExcludedIds(result?.jobs || [], excludedIds);
+    const normalizedJobs = filteredJobs.map(serializeJobForClient);
+    const summary = await buildVisibleJobsSummary(req.user._id, filteredJobs);
+
+    console.log("Jobs returned:", normalizedJobs.length, normalizedJobs[0] || null);
+
+    return res.status(200).json({
+      success: true,
+      message: normalizedJobs.length
+        ? `Found ${normalizedJobs.length} job${normalizedJobs.length === 1 ? "" : "s"}.`
+        : "No jobs found yet. Complete your profile to improve job matches.",
+      total: normalizedJobs.length,
+      totalFinal: normalizedJobs.length,
+      jobs: normalizedJobs,
+      summary,
+      failedTerms: Array.isArray(result?.failedTerms) ? result.failedTerms : [],
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to refresh jobs.",
+      error: error.message,
+    });
+  }
+});
 
 /**
  * GET /api/jobs/stored
